@@ -1,0 +1,29 @@
+.main {
+  padding: var(--spacing-lg);
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+h2 {
+  font-size: var(--font-heading-2xl-size);
+  line-height: var(--font-heading-2xl-line-height);
+  margin: 0 0 var(--spacing-sm);
+}
+
+.subtitle {
+  margin: 0 0 var(--spacing-lg);
+  opacity: 0.7;
+}
+
+#tally-container {
+  min-height: 300px;
+}
+
+.confirmation {
+  padding: var(--spacing-md);
+  border-radius: var(--border-radius-md);
+  background: light-dark(#ecfdf5, #064e3b);
+  color: light-dark(#065f46, #a7f3d0);
+  font-weight: var(--font-weight-bold);
+  text-align: center;
+}

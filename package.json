@@ -1,0 +1,34 @@
+{
+  "name": "webweaver-mcp-server",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "MCP server for WebWeaver Nexus — waitlist form, product overview, and contact info",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json && cross-env INPUT=mcp-app.html vite build && tsc -p tsconfig.server.json",
+    "watch": "cross-env INPUT=mcp-app.html vite build --watch",
+    "serve": "tsx main.ts",
+    "serve:stdio": "tsx main.ts --stdio",
+    "dev": "cross-env NODE_ENV=development concurrently \"npm run watch\" \"npm run serve\"",
+    "start": "cross-env NODE_ENV=development npm run build && npm run serve"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.7.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.6.0",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.9",
+    "vite-plugin-singlefile": "^2.3.3"
+  }
+}
