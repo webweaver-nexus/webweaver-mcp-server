@@ -49,11 +49,11 @@ The server listens at `http://localhost:3001/mcp` by default.
 
 ## Configuration
 
-Before deploying, update the Tally form ID:
+Before deploying, update the Tally form ID: √√√
 
-1. Open `src/mcp-app.ts`
-2. Replace `YOUR_FORM_ID_HERE` with your real Tally form ID
-3. Also update the `data-tally-src` URL in `mcp-app.html` to match
+1. Open `src/mcp-app.ts` √
+2. Replace `YOUR_FORM_ID_HERE` with your real Tally form ID √
+3. Also update the `data-tally-src` URL in `mcp-app.html` to match √
 
 ## Testing with Claude Desktop (Custom Connector)
 

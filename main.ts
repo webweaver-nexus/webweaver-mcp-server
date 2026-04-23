@@ -13,7 +13,7 @@ import { createServer } from "./server.js";
 async function startStreamableHTTPServer(): Promise<void> {
   const port = parseInt(process.env.PORT ?? "3001", 10);
 
-  const app = createMcpExpressApp({ host: "0.0.0.0" });
+  const app = createMcpExpressApp({ host: "localhost" });
   app.use(cors());
 
   app.all("/mcp", async (req: Request, res: Response) => {

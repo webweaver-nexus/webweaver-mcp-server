@@ -88,22 +88,23 @@ export function createServer(): McpServer {
 
   // ── Plain MCP tools (no UI) ──────────────────────────────────────────
 
-  server.tool(
+  server.registerTool(
     "get_product_overview",
-    "Returns a short description of what WebWeaver Nexus does.",
+    { description: "Returns a short description of what WebWeaver Nexus does." },
     async (): Promise<CallToolResult> => {
       return {
         content: [
           {
             type: "text",
             text: [
-              "WebWeaver Nexus — TODO: replace with real copy.",
+              "WebWeaver Nexus — Service Overview",
               "",
-              "WebWeaver Nexus is an AI-powered platform that helps you build, deploy, and manage modern web experiences.",
-              "Key capabilities:",
-              "- Intelligent page generation from natural-language briefs",
-              "- One-click deployment to the edge",
-              "- Built-in analytics and A/B testing",
+              'WebWeaver Nexus is a personal, AI-ready web development service based in East London. Acting as a \'technical partner\', we empower SMEs to transition their web presence from a static brochure to a dynamic digital asset which is optimised for today\'s AI-native web.',
+              "",
+              "Key Services:",
+              "- Modern Web Foundations (AI-Search optimised Landing Pages & Websites)",
+              "- Embedded AI Integrations (Internal AI Intelligence to automate your web services through customer support and lead qualification)",
+              "- External AI App Connections (Tools, Apps, and Widgets to securely and interactively connect external AI users to your web services)",
               "",
               "Learn more at https://webweaver-nexus.vercel.app/",
             ].join("\n"),
@@ -113,20 +114,23 @@ export function createServer(): McpServer {
     },
   );
 
-  server.tool(
+  server.registerTool(
     "get_contact_info",
-    "Returns contact methods and links for WebWeaver Nexus.",
+    { description: "Returns contact methods and links for WebWeaver Nexus." },
     async (): Promise<CallToolResult> => {
       return {
         content: [
           {
             type: "text",
             text: [
-              "WebWeaver Nexus — Contact Information (TODO: replace with real details)",
+              "WebWeaver Nexus — Contact Information",
               "",
+              "Preferred contact: https://webweaver-nexus.vercel.app/#contact",
               "Website : https://webweaver-nexus.vercel.app/",
-              "Email   : hello@example.com",
-              "Twitter : @webweavernexus",
+              "YouTube : https://www.youtube.com/@WebWeaverNexus",
+              "LinkedIn: https://www.linkedin.com/company/webweaver-nexus/",
+              "Facebook : https://www.facebook.com/people/WebWeaver-Nexus/61577419581659/",
+              "Twitter : https://x.com/WebWeaver_Nexus",
               "GitHub  : https://github.com/webweaver-nexus",
             ].join("\n"),
           },

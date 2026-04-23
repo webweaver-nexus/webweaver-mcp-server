@@ -16,7 +16,7 @@ import "./global.css";
 import "./mcp-app.css";
 
 // ── Tally form ID — swap this when you have your real form ─────────────
-const TALLY_FORM_ID = "YOUR_FORM_ID_HERE";
+const TALLY_FORM_ID = "3xGZlk";
 
 // ── DOM references ─────────────────────────────────────────────────────
 const mainEl = document.querySelector(".main") as HTMLElement;
