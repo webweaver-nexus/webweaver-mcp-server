@@ -13,7 +13,14 @@ import { createServer } from "./server.js";
 async function startStreamableHTTPServer(): Promise<void> {
   const port = parseInt(process.env.PORT ?? "3001", 10);
 
-  const app = createMcpExpressApp({ host: "localhost" });
+  const app = createMcpExpressApp({
+    host: "0.0.0.0",
+    allowedHosts: [
+      "localhost",
+      "127.0.0.1",
+      "webweaver-nexus-mcp.vercel.app",
+    ],
+  });
   app.use(cors());
 
   app.all("/mcp", async (req: Request, res: Response) => {

@@ -83,6 +83,27 @@ SERVERS='["http://localhost:3001/mcp"]' npm run start
 # Open http://localhost:8080
 ```
 
+## Deployment (Vercel)
+
+The MCP server is deployed as a Vercel serverless function using the Express + Streamable HTTP pattern.
+
+**Production URL:** `https://webweaver-nexus-mcp.vercel.app/mcp`
+
+**How it works:**
+- `vercel.json` routes all requests to the compiled `dist/main.js` Express app
+- The Vite-bundled `dist/mcp-app.html` (MCP App UI) is included in the deployment and read at runtime via `fs.readFile`
+- No environment variables are required — all configuration is hardcoded
+
+**To redeploy:** Push to the `main` branch. Vercel auto-deploys on push.
+
+**To verify the deployment:**
+```bash
+curl -X POST https://webweaver-nexus-mcp.vercel.app/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+```
+
 ## Project Structure
 
 ```

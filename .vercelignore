@@ -1,0 +1,17 @@
+# Dependencies (Vercel installs fresh)
+node_modules
+
+# Sibling test harness from Phase 2
+ext-apps
+
+# Local environment
+.env
+.env.*
+
+# IDE / OS
+.vscode
+.idea
+.DS_Store
+
+# Source maps (not needed in prod)
+*.map
