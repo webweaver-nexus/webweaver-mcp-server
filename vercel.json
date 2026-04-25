@@ -3,12 +3,6 @@
   "buildCommand": "npm run build",
   "installCommand": "npm install",
   "outputDirectory": ".",
-  "functions": {
-    "dist/main.js": {
-      "runtime": "@vercel/node@latest",
-      "maxDuration": 60
-    }
-  },
   "rewrites": [
     { "source": "/mcp", "destination": "/dist/main.js" },
     { "source": "/mcp/:path*", "destination": "/dist/main.js" }
