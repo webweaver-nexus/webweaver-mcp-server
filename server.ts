@@ -11,10 +11,13 @@ import type {
 import fs from "node:fs/promises";
 import path from "node:path";
 
-// Works both from source (server.ts) and compiled (dist/server.js)
-const DIST_DIR = import.meta.filename.endsWith(".ts")
-  ? path.join(import.meta.dirname, "dist")
-  : import.meta.dirname;
+// Resolve mcp-app.html location across environments:
+//   • Local dev (`npm run serve`):  <project>/dist/mcp-app.html
+//   • Vercel serverless:            /var/task/dist/mcp-app.html
+// process.cwd() returns the project root locally and /var/task on Vercel.
+// vercel.json's `includeFiles: "dist/mcp-app.html"` ensures the file is
+// bundled at /var/task/dist/mcp-app.html in production.
+const MCP_APP_HTML_PATH = path.join(process.cwd(), "dist", "mcp-app.html");
 
 /**
  * Creates a new MCP server instance with all tools and resources registered.
@@ -57,10 +60,7 @@ export function createServer(): McpServer {
     waitlistResourceUri,
     { mimeType: RESOURCE_MIME_TYPE },
     async (): Promise<ReadResourceResult> => {
-      const html = await fs.readFile(
-        path.join(DIST_DIR, "mcp-app.html"),
-        "utf-8",
-      );
+      const html = await fs.readFile(MCP_APP_HTML_PATH, "utf-8");
 
       return {
         contents: [
@@ -131,7 +131,7 @@ export function createServer(): McpServer {
               "LinkedIn: https://www.linkedin.com/company/webweaver-nexus/",
               "Facebook : https://www.facebook.com/people/WebWeaver-Nexus/61577419581659/",
               "Twitter : https://x.com/WebWeaver_Nexus",
-              "GitHub  : https://github.com/webweaver-nexus",
+              "GitHub  : https://github.com/webweaver-nexus/",
             ].join("\n"),
           },
         ],
