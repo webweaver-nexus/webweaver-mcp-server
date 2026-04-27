@@ -2,24 +2,20 @@
   "version": 2,
   "buildCommand": "npm run build",
   "installCommand": "npm install",
-  "outputDirectory": ".",
-  "functions": {
-    "dist/main.js": {
-      "runtime": "@vercel/node@5.7.13",
-      "maxDuration": 60,
-      "includeFiles": "dist/mcp-app.html"
-    }
-  },
   "rewrites": [
-    { "source": "/mcp", "destination": "/dist/main.js" },
-    { "source": "/mcp/:path*", "destination": "/dist/main.js" }
+    { "source": "/mcp", "destination": "/api/mcp" },
+    { "source": "/mcp/:path*", "destination": "/api/mcp" }
   ],
   "headers": [
     {
-      "source": "/mcp",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store" }
-      ]
+      "source": "/(mcp|api/mcp)",
+      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
     }
-  ]
+  ],
+  "functions": {
+    "api/mcp.ts": {
+      "maxDuration": 60,
+      "includeFiles": "dist/mcp-app.html"
+    }
+  }
 }
