@@ -10,14 +10,36 @@ import type {
 } from "@modelcontextprotocol/sdk/types.js";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
 
-// Resolve mcp-app.html location across environments:
+// Resolve mcp-app.html across all execution environments by probing
+// known candidate locations and picking the first one that exists.
+//
 //   • Local dev (`npm run serve`):  <project>/dist/mcp-app.html
+//   • Local dev (compiled JS):      <dist>/mcp-app.html (sibling)
 //   • Vercel serverless:            /var/task/dist/mcp-app.html
-// process.cwd() returns the project root locally and /var/task on Vercel.
-// vercel.json's `includeFiles: "dist/mcp-app.html"` ensures the file is
-// bundled at /var/task/dist/mcp-app.html in production.
-const MCP_APP_HTML_PATH = path.join(process.cwd(), "dist", "mcp-app.html");
+//   • Claude Desktop (stdio):       depends on launch cwd, often "/"
+//
+// The compiled `dist/server.js` lives next to `dist/mcp-app.html`, so
+// resolving relative to this file's location is the most reliable anchor.
+function resolveMcpAppHtmlPath(): string {
+  const thisDir = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.join(thisDir, "mcp-app.html"),                        // sibling of compiled server.js
+    path.join(thisDir, "..", "dist", "mcp-app.html"),          // ts source running in a sibling layout
+    path.join(process.cwd(), "dist", "mcp-app.html"),          // launched from project root
+    "/var/task/dist/mcp-app.html",                             // Vercel
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  throw new Error(
+    `Could not locate mcp-app.html. Tried:\n${candidates.map(c => `  - ${c}`).join("\n")}`,
+  );
+}
+
+const MCP_APP_HTML_PATH = resolveMcpAppHtmlPath();
 
 /**
  * Creates a new MCP server instance with all tools and resources registered.
