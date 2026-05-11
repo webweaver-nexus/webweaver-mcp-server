@@ -113,9 +113,9 @@ Click **Connect**, then verify across tabs:
 | "Does `app.updateModelContext()` fire back into the conversation?" | basic-host (Inspector lacks a panel) |
 | Fastest post-deploy sanity check | Inspector |
 
-## Testing with Claude Desktop (Custom Connector)
+## Exposing local dev to claude.ai (Cloudflare tunnel)
 
-To test with claude.ai using a local server, expose it via a Cloudflare tunnel:
+For iterating on the server locally against claude.ai's custom connector UI (which only accepts public HTTPS URLs, not `localhost`), expose your dev server via a Cloudflare tunnel:
 
 ```bash
 # Terminal 1 — run the server
@@ -161,6 +161,80 @@ curl -X POST https://webweaver-nexus-mcp.vercel.app/mcp \
 ```
 
 For an interactive equivalent, run MCP Inspector against the deployed URL (see [Testing with MCP Inspector](#testing-with-mcp-inspector-quick-smoke-test) above). Recommended as the first post-deploy check before bringing up basic-host.
+
+## Install in your MCP client
+
+All clients connect to the same endpoint:
+
+```
+https://webweaver-nexus-mcp.vercel.app/mcp
+```
+
+Transport is **Streamable HTTP**. No authentication; all three tools are publicly callable.
+
+Hosts that speak Streamable HTTP natively (claude.ai, ChatGPT, MCP Inspector, basic-host) take the URL directly. stdio-only hosts (Claude Desktop, Cursor today) use the `mcp-remote` npm shim — a small package that launches as a local stdio process and proxies JSON-RPC to the remote URL.
+
+### Claude Desktop
+
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+
+```json
+{
+  "mcpServers": {
+    "webweaver-nexus": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://webweaver-nexus-mcp.vercel.app/mcp"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop; the three tools appear in the tools menu.
+
+> The two read-only tools work in Claude Desktop. `join_waitlist` does not, due to the stdio `cwd` issue described in [Known Limitations](#known-limitations) — this is a server-side path-resolution gap, not an `mcp-remote` problem.
+
+### claude.ai (Custom Connector)
+
+claude.ai speaks Streamable HTTP natively — no shim.
+
+1. Open **Settings → Connectors** (or **Feature Preview → MCP**, depending on rollout).
+2. **Add custom connector** → paste `https://webweaver-nexus-mcp.vercel.app/mcp`.
+3. Save.
+
+The two read-only tools work. `join_waitlist`'s Tally form is blocked by an upstream `frameDomains` bug — see [Known Limitations](#known-limitations).
+
+### Cursor
+
+Edit `~/.cursor/mcp.json`, or use **Settings → MCP Servers** in the Cursor UI:
+
+```json
+{
+  "mcpServers": {
+    "webweaver-nexus": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://webweaver-nexus-mcp.vercel.app/mcp"]
+    }
+  }
+}
+```
+
+Reload the Cursor window (`Cmd+Shift+P → Reload Window`).
+
+### ChatGPT
+
+Available on plan tiers that support MCP / custom connectors.
+
+1. **Settings → Connectors** (or **Apps**) → **Add custom MCP server**.
+2. Paste `https://webweaver-nexus-mcp.vercel.app/mcp`.
+3. Enable for a conversation.
+
+### Verifying the connection (any client)
+
+Ask the host something like:
+
+> Use the WebWeaver Nexus connector to get the product overview.
+
+If the tool fires and returns text, the wire is good. For `join_waitlist`, the embedded Tally form renders directly in the conversation on hosts that have shipped MCP Apps rendering (Inspector Apps tab, basic-host) — see the per-client caveats above for the others.
 
 ## Known Limitations
 
