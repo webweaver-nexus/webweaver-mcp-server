@@ -81,6 +81,38 @@ SERVERS='["https://webweaver-nexus-mcp.vercel.app/mcp"]' npx tsx serve.ts
 
 This is the most reliable end-to-end test — it exercises the full Vercel deployment, CSP propagation, sandbox iframe loading, Tally embed, and submit event flow.
 
+## Testing with MCP Inspector (quick smoke test)
+
+[MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) is Anthropic's official browser-based MCP debugger. It runs via `npx` (no install) and is the fastest way to verify that a server is reachable, tools list correctly, plain tools return expected output, and MCP App UI resources render correctly via the **Apps** tab.
+
+```bash
+npx @modelcontextprotocol/inspector
+```
+
+This opens a browser UI. Set:
+
+- **Transport Type:** `Streamable HTTP`
+- **Connection Type:** `Via Proxy` or `Direct` — both work for our server. Proxy routes JSON-RPC through Inspector's local proxy (port `6277`); Direct goes browser → server. Either renders MCP Apps and honors the CSP correctly. Verified against Inspector v0.21.2.
+- **URL:** `http://localhost:3001/mcp` (local) or `https://webweaver-nexus-mcp.vercel.app/mcp` (production)
+
+Click **Connect**, then verify across tabs:
+
+1. **Tools** — all 3 tools appear (`join_waitlist`, `get_product_overview`, `get_contact_info`); the two plain tools return their placeholder text when called.
+2. **Resources** — `ui://join-waitlist/mcp-app.html` lists; reading it returns ~330 KB of bundled HTML.
+3. **Apps** — select `join_waitlist` in the apps panel; the embedded Tally form renders inside its sandboxed iframe. Submit the form to verify the Tally pipeline end-to-end (form data POSTs to tally.so, configured notification emails fire).
+
+**Limitation — `updateModelContext` not observable in the UI:** Inspector (as of v0.21.2) does not currently surface model-context updates that the app pushes back via `appBridge.sendUpdateModelContext`. The Tally render and submit flow are fully validated by Inspector, but to confirm the confirmation message actually fires into the host conversation, fall back to basic-host (which has a dedicated "Model Context" panel).
+
+**When to use which:**
+
+| Need | Use |
+|------|-----|
+| "Is the server reachable? Do tools list?" | Inspector |
+| "Do the plain tools return the right text?" | Inspector |
+| "Does the Tally form render, submit, and fire emails?" | Inspector or basic-host |
+| "Does `app.updateModelContext()` fire back into the conversation?" | basic-host (Inspector lacks a panel) |
+| Fastest post-deploy sanity check | Inspector |
+
 ## Testing with Claude Desktop (Custom Connector)
 
 To test with claude.ai using a local server, expose it via a Cloudflare tunnel:
@@ -127,6 +159,8 @@ curl -X POST https://webweaver-nexus-mcp.vercel.app/mcp \
   -d '{"jsonrpc":"2.0","method":"resources/read","params":{"uri":"ui://join-waitlist/mcp-app.html"},"id":1}' \
   | wc -c
 ```
+
+For an interactive equivalent, run MCP Inspector against the deployed URL (see [Testing with MCP Inspector](#testing-with-mcp-inspector-quick-smoke-test) above). Recommended as the first post-deploy check before bringing up basic-host.
 
 ## Known Limitations
 
