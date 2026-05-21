@@ -1,0 +1,16 @@
+{
+  "name": "io.github.webweaver-nexus/webweaver-mcp-server",
+  "description": "WebWeaver Nexus services for MCP hosts: waitlist signup (with UI), product overview, contact info.",
+  "version": "1.0.0",
+  "repository": {
+    "url": "https://github.com/webweaver-nexus/webweaver-mcp-server",
+    "source": "github"
+  },
+  "websiteUrl": "https://github.com/webweaver-nexus/webweaver-mcp-server",
+  "remotes": [
+    {
+      "transport": "streamable-http",
+      "url": "https://webweaver-nexus-mcp.vercel.app/mcp"
+    }
+  ]
+}
