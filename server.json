@@ -1,4 +1,5 @@
 {
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.webweaver-nexus/webweaver-mcp-server",
   "description": "WebWeaver Nexus services for MCP hosts: waitlist signup (with UI), product overview, contact info.",
   "version": "1.0.0",
@@ -9,7 +10,7 @@
   "websiteUrl": "https://github.com/webweaver-nexus/webweaver-mcp-server",
   "remotes": [
     {
-      "transport": "streamable-http",
+      "type": "streamable-http",
       "url": "https://webweaver-nexus-mcp.vercel.app/mcp"
     }
   ]
