@@ -1,8 +1,8 @@
 # WebWeaver Nexus MCP Server
 
-An MCP server that exposes WebWeaver Nexus tools to MCP-enabled hosts (Claude Desktop, claude.ai, basic-host, etc.).
+An MCP server that exposes WebWeaver Nexus services — waitlist signup (with an embedded form UI), product overview, and contact info — to MCP-enabled hosts (Claude Desktop, claude.ai, ChatGPT, Cursor, MCP Inspector, basic-host).
 
-**Production URL:** `https://webweaver-nexus-mcp.vercel.app/mcp`
+**Production URL:** `https://webweaver-nexus-mcp.vercel.app/mcp` — Streamable HTTP, public, no authentication.
 
 ## Tools
 
