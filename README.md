@@ -4,6 +4,10 @@ An MCP server that exposes WebWeaver Nexus services — waitlist signup (with an
 
 **Production URL:** `https://webweaver-nexus-mcp.vercel.app/mcp` — Streamable HTTP, public, no authentication.
 
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-active-blue)](https://registry.modelcontextprotocol.io/?q=io.github.webweaver-nexus)
+
+Published to the official MCP registry as `io.github.webweaver-nexus/webweaver-mcp-server` (v1.0.0).
+
 ## Tools
 
 | Tool | Type | Description |
