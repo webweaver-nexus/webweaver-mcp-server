@@ -45,7 +45,7 @@ Two local changes to the upstream copy:
 
 ```bash
 # once
-npm install
+npm install && npm run build
 
 # terminal 1 — the MCP server under test
 cd ../.. && npm run build && npm run serve      # http://localhost:3001/mcp
@@ -56,19 +56,23 @@ SERVERS='["http://localhost:3001/mcp"]' npm run serve
 
 Then open **http://localhost:8080** and pick `join_waitlist`.
 
-`dist/` is committed and prebuilt, so no build step is needed to run it. `npm run build` rebuilds
-it (React + Vite) if you ever edit `src/`.
+`dist/` is a build artifact and is git-ignored, so build once after installing. The build produces
+two single-file bundles (`dist/index.html`, `dist/sandbox.html`) via Vite.
 
 ### Things that will trip you up
 
 - **`SERVERS` is a JSON array**, not a bare URL: `SERVERS='["http://localhost:3001/mcp"]'`.
   It defaults to `["http://localhost:3001/mcp"]`, which is already this server's dev port.
 - **Ports 8080 and 8081 are effectively fixed.** The sandbox origin is hardcoded as
-  `SANDBOX_PROXY_BASE_URL` in `src/implementation.ts` and baked into the prebuilt bundle, so
+  `SANDBOX_PROXY_BASE_URL` in `src/implementation.ts` and baked into the bundle at build time, so
   setting `SANDBOX_PORT` alone breaks the sandbox. Both ports must be free.
 - **The Model Context panel is hidden until the first non-empty update arrives.** For
   `join_waitlist` that means it appears only after a real Tally form submission — which creates a
   real waitlist entry and fires notification emails.
+- **The Tally form loads lazily.** Tally's loader uses an `IntersectionObserver`, and the iframe
+  is `loading="lazy"`, so the form may not be requested until you scroll it into view. A blank
+  space where the form should be is not necessarily a failure — scroll first, then check whether
+  `tally.so/embed/<form-id>` was requested.
 - **Only the latest update is shown** (it replaces, it does not append), and the panel is hidden
   entirely while the App is in fullscreen display mode.
 

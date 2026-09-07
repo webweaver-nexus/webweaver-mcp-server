@@ -109,7 +109,7 @@ A vendored copy of the MCP Apps `basic-host` harness lives in [`tools/basic-host
 
 ```bash
 # once
-cd tools/basic-host && npm install
+cd tools/basic-host && npm install && npm run build
 
 # Terminal 1 — the server under test
 npm run build && npm run serve
