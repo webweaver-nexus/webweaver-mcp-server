@@ -6,24 +6,71 @@
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import cors from "cors";
-import type { Request, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { createServer } from "../server.js";
 
-const app = createMcpExpressApp({
-  host: "0.0.0.0",
-  allowedHosts: [
-    "localhost",
-    "127.0.0.1",
-    "webweaver-nexus-mcp.vercel.app",
-  ],
-});
+// No `allowedHosts` here on purpose — see the host validation below. The SDK
+// logs a "binding without DNS rebinding protection" warning at startup as a
+// result; it is expected, and the middleware below provides that protection.
+const app = createMcpExpressApp({ host: "0.0.0.0" });
 
 // Vercel (and the cloudflared tunnel used for local claude.ai testing) fronts
 // the app with a single proxy hop and sets X-Forwarded-For. Without this,
 // Express falls back to the proxy's socket IP, so every caller shares one
 // rate-limit bucket and a single noisy client can 429 all other hosts.
 app.set("trust proxy", 1);
+
+// Host header validation (DNS rebinding protection). The SDK's `allowedHosts`
+// option matches exact strings only, which rejected two hostnames we serve
+// legitimately: Vercel preview deployments and the `cloudflared` tunnel the
+// README uses to test local dev against claude.ai. Patterns cover both.
+const ALLOWED_HOSTS: readonly (string | RegExp)[] = [
+  "localhost",
+  "127.0.0.1",
+  "[::1]",
+  "webweaver-nexus-mcp.vercel.app",
+  // Vercel preview deployments, e.g. webweaver-nexus-mcp-git-<branch>-<scope>
+  /^webweaver-nexus-mcp-[a-z0-9-]+\.vercel\.app$/,
+  // `npx cloudflared tunnel --url http://localhost:3001` — dev only; this
+  // hostname never reaches the Vercel deployment, its edge rejects it first.
+  /^[a-z0-9-]+\.trycloudflare\.com$/,
+];
+
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const hostHeader = req.headers.host;
+  let hostname: string | undefined;
+
+  if (hostHeader) {
+    try {
+      // Parsing via URL keeps this port-agnostic and IPv6-safe, matching the
+      // SDK middleware this replaces.
+      hostname = new URL(`http://${hostHeader}`).hostname;
+    } catch {
+      hostname = undefined;
+    }
+  }
+
+  const allowed =
+    hostname !== undefined &&
+    ALLOWED_HOSTS.some((entry) =>
+      typeof entry === "string" ? entry === hostname : entry.test(hostname),
+    );
+
+  if (!allowed) {
+    res.status(403).json({
+      jsonrpc: "2.0",
+      error: {
+        code: -32000,
+        message: `Invalid Host: ${hostHeader ?? "(missing)"}`,
+      },
+      id: null,
+    });
+    return;
+  }
+
+  next();
+});
 
 app.use(
   cors({

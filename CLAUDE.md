@@ -21,7 +21,7 @@ For the WebWeaver Nexus product context (this repo's role within Tier 3), see `.
 
 - `server.ts` — **canonical tool/resource registration.** Exports `createServer()`. This is the only place tools are defined.
 - `main.ts` — local-dev entry. Supports `--stdio` or HTTP on `PORT` (default 3001). Imports `createServer()`.
-- `api/mcp.ts` — Vercel serverless entry. Exports the Express app as `default`. Imports `createServer()`. Hardcodes `allowedHosts` (localhost + production domain) and uses `StreamableHTTPServerTransport` per-request (no session reuse).
+- `api/mcp.ts` — Vercel serverless entry. Exports the Express app as `default`. Imports `createServer()`. Owns the edge concerns — `trust proxy`, Host validation, CORS, rate limiting — and uses `StreamableHTTPServerTransport` per-request (no session reuse).
 
 When fixing a **tool** bug, edit `server.ts` — the change picks up in both entry points. When fixing a **transport/CORS/routing** bug, identify which entry point it affects.
 
@@ -49,7 +49,7 @@ These are the places hardcoded values live. There are no env vars; don't go hunt
 | What | Where | Notes |
 |---|---|---|
 | Tally form ID | `src/mcp-app.ts` (`TALLY_FORM_ID` const) **and** `mcp-app.html` (`data-tally-src` URL) | **Must match in both files.** The TS const is checked against incoming `Tally.FormSubmitted` events; the HTML attribute is what Tally's loader reads. |
-| Allowed Host headers | `api/mcp.ts` (`allowedHosts` array) | New deploy domains (preview URLs, alternate prod domains) must be added here or requests get rejected. |
+| Allowed Host headers | `api/mcp.ts` (`ALLOWED_HOSTS` array) | Strings match exactly, regexes match patterns (Vercel previews, `*.trycloudflare.com`). New deploy domains must be added here or requests 403. Anchor any regex you add — `.vercel.app` unanchored would match `evil-....vercel.app.attacker.com`. |
 | Server name/version | `server.ts` (`new McpServer({ name, version })`) | Reported to hosts on `initialize`. |
 | App name/version | `src/mcp-app.ts` (`new App({ name, version })`) | Reported during the App handshake with the host. |
 | Vercel runtime | `vercel.json` | `maxDuration` + routing only. `includeFiles` was removed once the HTML was compiled into the function. |
@@ -59,6 +59,7 @@ These are the places hardcoded values live. There are no env vars; don't go hunt
 
 - **The App HTML is compiled in, not read from disk.** `server.ts` imports `MCP_APP_HTML` from `generated/mcp-app-html.ts`, which a `vite.config.ts` build plugin writes from `dist/mcp-app.html` on every build. Don't reintroduce a runtime `fs.readFile` or a path probe: the old `process.cwd()` lookup broke under stdio (`cwd=/`), and the probe that replaced it resolved to the *unbundled* source HTML on Vercel (tried and reverted around 28 April 2026). The plugin throws if the HTML it's about to inline still references `/src/mcp-app.ts`, which is the signature of that regression.
 - **`generated/` is git-ignored, so build order matters.** `npm run build` runs Vite *before* the server type-check for this reason; on a fresh clone `server.ts` won't type-check until you've built once. `npm run serve` loads the constant at startup, so UI edits need a server restart (the old `fs.readFile` picked them up per-request).
+- **The SDK's `allowedHosts` option is deliberately unused.** It only matches exact strings, so it cannot express Vercel preview domains or tunnel hostnames; `api/mcp.ts` supplies equivalent middleware instead. The SDK therefore logs a "binding to 0.0.0.0 without DNS rebinding protection" warning at startup — expected, not a regression.
 - **claude.ai custom connectors currently ignore `frameDomains`** declared in `_meta.ui.csp` (upstream issue `anthropics/claude-ai-mcp#40`). The Tally embed in `join_waitlist` is blocked there until that's fixed; the two read-only tools work fine. Don't attempt to "fix" this from our side — it's a host bug.
 - **`StreamableHTTPServerTransport` is constructed per-request** in `api/mcp.ts` with `sessionIdGenerator: undefined` (no session reuse). If you add stateful tools that need per-session memory, this is the place to revisit — currently every request is independent.
 

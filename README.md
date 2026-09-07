@@ -21,6 +21,8 @@ Published to the official MCP registry as `io.github.webweaver-nexus/webweaver-m
 - Node.js 24.x (see `engines` in `package.json`)
 - npm
 
+> `engines` pins 24.x deliberately: Vercel selects the function runtime from it. Newer local Node majors work fine but make npm print an `EBADENGINE` warning.
+
 ## Install
 
 ```bash
@@ -106,7 +108,7 @@ This opens a browser UI. Set:
 Click **Connect**, then verify across tabs:
 
 1. **Tools** — all 3 tools appear (`join_waitlist`, `get_product_overview`, `get_contact_info`); the two plain tools return their placeholder text when called.
-2. **Resources** — `ui://join-waitlist/mcp-app.html` lists; reading it returns ~330 KB of bundled HTML.
+2. **Resources** — `ui://join-waitlist/mcp-app.html` lists; reading it returns ~435 KB of bundled HTML.
 3. **Apps** — select `join_waitlist` in the apps panel; the embedded Tally form renders inside its sandboxed iframe. Submit the form to verify the Tally pipeline end-to-end (form data POSTs to tally.so, configured notification emails fire).
 
 **Limitation — `updateModelContext` not observable in the UI:** Inspector (as of v0.21.2) does not currently surface model-context updates that the app pushes back via `appBridge.sendUpdateModelContext`. The Tally render and submit flow are fully validated by Inspector, but to confirm the confirmation message actually fires into the host conversation, fall back to basic-host (which has a dedicated "Model Context" panel).
@@ -135,6 +137,8 @@ npx cloudflared tunnel --url http://localhost:3001
 
 Copy the `https://*.trycloudflare.com` URL from the tunnel output. In Claude's settings, add a custom MCP connector pointing to `https://<tunnel-url>/mcp`.
 
+`*.trycloudflare.com` is allowlisted by the Host header check in `api/mcp.ts` — cloudflared forwards the public hostname rather than `localhost`, so without that entry every tunnelled request is rejected with `403 Invalid Host`.
+
 > **Note:** As of writing, claude.ai's custom connectors ignore `frameDomains` declared in `_meta.ui.csp` (see [GitHub issue `anthropics/claude-ai-mcp#40`](https://github.com/anthropics/claude-ai-mcp/issues/40)). This will cause the Tally embed in `join_waitlist` to be blocked. The two read-only tools work correctly. Track that issue for the fix.
 
 ## Deployment (Vercel)
@@ -158,7 +162,7 @@ curl -X POST https://webweaver-nexus-mcp.vercel.app/mcp \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
 
-# Resource read — should return ~330 KB of bundled HTML.
+# Resource read — should return ~435 KB of bundled HTML.
 # A response under a few KB means the unbundled source HTML was inlined
 # instead of the bundle (the build guards against this — see git history).
 curl -X POST https://webweaver-nexus-mcp.vercel.app/mcp \
@@ -280,6 +284,6 @@ See the note under [Exposing local dev to claude.ai](#exposing-local-dev-to-clau
 
 ## Version History
 
-- **v1.0.1** — `join_waitlist` now works over stdio (Claude Desktop). The App HTML is compiled into the server instead of read from disk, removing the `process.cwd()` dependency. Rate limiting is now per-client: `trust proxy` was unset, so every caller shared a single 60/min bucket behind Vercel's proxy.
+- **v1.0.1** — `join_waitlist` now works over stdio (Claude Desktop). The App HTML is compiled into the server instead of read from disk, removing the `process.cwd()` dependency. Rate limiting is now per-client: `trust proxy` was unset, so every caller shared a single 60/min bucket behind Vercel's proxy. Host validation now accepts Vercel preview deployments and `*.trycloudflare.com`, which the documented tunnel workflow needs. Dependencies updated to clear all `npm audit` advisories (MCP SDK 1.29 → 1.30).
 - **v1.0.0** — Published to the official MCP registry as `io.github.webweaver-nexus/webweaver-mcp-server`. Endpoint hardened with a CORS allowlist and rate limiting.
 - **v0.1.0** — First working production deployment. Three tools live; `join_waitlist` works on Streamable HTTP hosts. Claude Desktop stdio integration deferred.
