@@ -1,8 +1,8 @@
 # Dependencies (Vercel installs fresh)
 node_modules
 
-# Sibling test harness from Phase 2
-ext-apps
+# Local MCP host harness (tools/basic-host) — never needed by the function
+tools
 
 # Local environment
 .env

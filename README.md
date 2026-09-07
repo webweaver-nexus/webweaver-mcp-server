@@ -67,61 +67,77 @@ Before deploying, update the Tally form ID:
 2. Replace the form ID constant with your real Tally form ID
 3. Also update the `data-tally-src` URL in `mcp-app.html` to match
 
-## Testing with basic-host (local)
+Tally's `embed.js` does **not** populate embeds by itself — `src/mcp-app.ts` has to call `window.Tally.loadEmbeds()` once the script loads, or the iframe keeps its `data-tally-src`, never gets a `src`, and the form silently renders as blank space.
 
-```bash
-# Terminal 1 — run your server
-npm run build && npm run serve
+## Testing with MCP Inspector (default harness)
 
-# Terminal 2 — clone and run the MCP Apps basic-host
-git clone --depth 1 https://github.com/modelcontextprotocol/ext-apps.git /tmp/mcp-ext-apps
-cd /tmp/mcp-ext-apps/examples/basic-host
-npm install
-SERVERS='["http://localhost:3001/mcp"]' npm run start
-# Open http://localhost:8080
-```
-
-## Testing with basic-host (against production)
-
-To run the same harness against the deployed server instead of localhost:
-
-```bash
-SERVERS='["https://webweaver-nexus-mcp.vercel.app/mcp"]' npx tsx serve.ts
-```
-
-This is the most reliable end-to-end test — it exercises the full Vercel deployment, CSP propagation, sandbox iframe loading, Tally embed, and submit event flow.
-
-## Testing with MCP Inspector (quick smoke test)
-
-[MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) is Anthropic's official browser-based MCP debugger. It runs via `npx` (no install) and is the fastest way to verify that a server is reachable, tools list correctly, plain tools return expected output, and MCP App UI resources render correctly via the **Apps** tab.
+[MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) is the official MCP debugger and the right tool for almost every check here. Verified against **v2.5.0**.
 
 ```bash
 npx @modelcontextprotocol/inspector
 ```
 
-This opens a browser UI. Set:
+The web UI opens on port `6274`. Set:
 
 - **Transport Type:** `Streamable HTTP`
-- **Connection Type:** `Via Proxy` or `Direct` — both work for our server. Proxy routes JSON-RPC through Inspector's local proxy (port `6277`); Direct goes browser → server. Either renders MCP Apps and honors the CSP correctly. Verified against Inspector v0.21.2.
+- **Connection Type:** `Via Proxy` or `Direct` — both work. Proxy routes JSON-RPC through Inspector's local proxy (port `6277`); Direct goes browser → server.
 - **URL:** `http://localhost:3001/mcp` (local) or `https://webweaver-nexus-mcp.vercel.app/mcp` (production)
 
 Click **Connect**, then verify across tabs:
 
-1. **Tools** — all 3 tools appear (`join_waitlist`, `get_product_overview`, `get_contact_info`); the two plain tools return their placeholder text when called.
+1. **Tools** — all 3 tools appear (`join_waitlist`, `get_product_overview`, `get_contact_info`); the two plain tools return their text when called.
 2. **Resources** — `ui://join-waitlist/mcp-app.html` lists; reading it returns ~435 KB of bundled HTML.
-3. **Apps** — select `join_waitlist` in the apps panel; the embedded Tally form renders inside its sandboxed iframe. Submit the form to verify the Tally pipeline end-to-end (form data POSTs to tally.so, configured notification emails fire).
+3. **Apps** — select `join_waitlist`; the Tally form renders inside its sandboxed iframe. Inspector builds a real CSP from our `_meta.ui.csp`, so this genuinely exercises `resourceDomains` / `frameDomains` / `connectDomains`.
 
-**Limitation — `updateModelContext` not observable in the UI:** Inspector (as of v0.21.2) does not currently surface model-context updates that the app pushes back via `appBridge.sendUpdateModelContext`. The Tally render and submit flow are fully validated by Inspector, but to confirm the confirmation message actually fires into the host conversation, fall back to basic-host (which has a dedicated "Model Context" panel).
+There is also a CLI, which makes post-deploy checks scriptable without a browser:
 
-**When to use which:**
+```bash
+npx @modelcontextprotocol/inspector --cli --transport http \
+  --server-url https://webweaver-nexus-mcp.vercel.app/mcp --method tools/list
+
+# App metadata for a UI tool
+npx @modelcontextprotocol/inspector --cli --transport http \
+  --server-url https://webweaver-nexus-mcp.vercel.app/mcp \
+  --method tools/call --tool-name join_waitlist --app-info
+```
+
+**The one thing Inspector cannot do:** accept `ui/update-model-context`. As of v2.5.0 it never registers an `onupdatemodelcontext` handler and never declares the capability, so `app.updateModelContext()` has nowhere to land. Use basic-host for that one check.
+
+## Testing with basic-host (model context updates)
+
+A vendored copy of the MCP Apps `basic-host` harness lives in [`tools/basic-host/`](tools/basic-host/). It is the only local host that declares the `updateModelContext` capability and renders a 📋 **Model Context** panel, which is how you confirm the waitlist form actually notifies the host model after submission.
+
+```bash
+# once
+cd tools/basic-host && npm install
+
+# Terminal 1 — the server under test
+npm run build && npm run serve
+
+# Terminal 2 — the harness
+cd tools/basic-host && SERVERS='["http://localhost:3001/mcp"]' npm run serve
+# Open http://localhost:8080
+```
+
+Against production instead:
+
+```bash
+cd tools/basic-host && SERVERS='["https://webweaver-nexus-mcp.vercel.app/mcp"]' npm run serve
+```
+
+`SERVERS` is a **JSON array**, and ports 8080/8081 are effectively fixed — see [`tools/basic-host/README.md`](tools/basic-host/README.md) for provenance and the full set of caveats.
+
+> The Model Context panel stays hidden until the first update arrives, which for `join_waitlist` means a **real Tally submission** — it creates a live waitlist entry and fires notification emails. Use a throwaway entry.
+
+## When to use which
 
 | Need | Use |
 |------|-----|
-| "Is the server reachable? Do tools list?" | Inspector |
+| "Is the server reachable? Do tools list?" | Inspector (`--cli` for scripts) |
 | "Do the plain tools return the right text?" | Inspector |
-| "Does the Tally form render, submit, and fire emails?" | Inspector or basic-host |
-| "Does `app.updateModelContext()` fire back into the conversation?" | basic-host (Inspector lacks a panel) |
-| Fastest post-deploy sanity check | Inspector |
+| "Does the Tally form render inside the CSP sandbox?" | Inspector |
+| "Does `app.updateModelContext()` reach the host?" | basic-host — Inspector cannot |
+| Fastest post-deploy sanity check | Inspector `--cli` |
 
 ## Exposing local dev to claude.ai (Cloudflare tunnel)
 
@@ -274,6 +290,8 @@ See the note under [Exposing local dev to claude.ai](#exposing-local-dev-to-clau
 │   ├── mcp-app.ts       # Client-side App lifecycle + Tally integration
 │   ├── mcp-app.css      # App-specific styles
 │   └── global.css       # Host variable fallbacks & reset
+├── tools/
+│   └── basic-host/      # Vendored MCP host harness (model context updates)
 ├── generated/           # Build artifact — bundled HTML as a TS constant (git-ignored)
 ├── dist/                # Build output — function code + bundled mcp-app.html
 ├── vite.config.ts       # Vite + singlefile plugin config
@@ -284,6 +302,7 @@ See the note under [Exposing local dev to claude.ai](#exposing-local-dev-to-clau
 
 ## Version History
 
+- **v1.0.2** — Fixed `join_waitlist` rendering an empty panel in every host: the app loaded Tally's `embed.js` but never called `Tally.loadEmbeds()`, so the form iframe was never given a `src`. Also guards `updateModelContext` behind the host capability, and vendors the basic-host harness into `tools/basic-host/` so the `ext-apps` clone is no longer needed.
 - **v1.0.1** — `join_waitlist` now works over stdio (Claude Desktop). The App HTML is compiled into the server instead of read from disk, removing the `process.cwd()` dependency. Rate limiting is now per-client: `trust proxy` was unset, so every caller shared a single 60/min bucket behind Vercel's proxy. Host validation now accepts Vercel preview deployments and `*.trycloudflare.com`, which the documented tunnel workflow needs. Dependencies updated to clear all `npm audit` advisories (MCP SDK 1.29 → 1.30).
 - **v1.0.0** — Published to the official MCP registry as `io.github.webweaver-nexus/webweaver-mcp-server`. Endpoint hardened with a CORS allowlist and rate limiting.
 - **v0.1.0** — First working production deployment. Three tools live; `join_waitlist` works on Streamable HTTP hosts. Claude Desktop stdio integration deferred.

@@ -60,6 +60,8 @@ These are the places hardcoded values live. There are no env vars; don't go hunt
 - **The App HTML is compiled in, not read from disk.** `server.ts` imports `MCP_APP_HTML` from `generated/mcp-app-html.ts`, which a `vite.config.ts` build plugin writes from `dist/mcp-app.html` on every build. Don't reintroduce a runtime `fs.readFile` or a path probe: the old `process.cwd()` lookup broke under stdio (`cwd=/`), and the probe that replaced it resolved to the *unbundled* source HTML on Vercel (tried and reverted around 28 April 2026). The plugin throws if the HTML it's about to inline still references `/src/mcp-app.ts`, which is the signature of that regression.
 - **`generated/` is git-ignored, so build order matters.** `npm run build` runs Vite *before* the server type-check for this reason; on a fresh clone `server.ts` won't type-check until you've built once. `npm run serve` loads the constant at startup, so UI edits need a server restart (the old `fs.readFile` picked them up per-request).
 - **The SDK's `allowedHosts` option is deliberately unused.** It only matches exact strings, so it cannot express Vercel preview domains or tunnel hostnames; `api/mcp.ts` supplies equivalent middleware instead. The SDK therefore logs a "binding to 0.0.0.0 without DNS rebinding protection" warning at startup — expected, not a regression.
+- **Tally's `embed.js` never populates embeds on its own.** It assigns `window.Tally` and handles popup config, nothing else — `src/mcp-app.ts` must call `window.Tally.loadEmbeds()` on script load. Without it the iframe keeps `data-tally-src`, is never given a `src`, and the form renders as blank space with no console error. This shipped broken until v1.0.2; if the form ever goes blank again, check this first.
+- **Inspector cannot receive `ui/update-model-context`.** As of v2.5.0 it registers no `onupdatemodelcontext` handler and does not declare the capability, so `app.updateModelContext()` would reject there. `src/mcp-app.ts` checks `getHostCapabilities()` before calling. Use `tools/basic-host` to verify that path.
 - **claude.ai custom connectors currently ignore `frameDomains`** declared in `_meta.ui.csp` (upstream issue `anthropics/claude-ai-mcp#40`). The Tally embed in `join_waitlist` is blocked there until that's fixed; the two read-only tools work fine. Don't attempt to "fix" this from our side — it's a host bug.
 - **`StreamableHTTPServerTransport` is constructed per-request** in `api/mcp.ts` with `sessionIdGenerator: undefined` (no session reuse). If you add stateful tools that need per-session memory, this is the place to revisit — currently every request is independent.
 
@@ -72,6 +74,6 @@ These are the places hardcoded values live. There are no env vars; don't go hunt
 
 ## What's not here
 
-- **No tests.** Verification is via the README's `curl` checks and the basic-host harness from `ext-apps/examples/basic-host`.
+- **No tests.** Verification is via the README's `curl` checks, MCP Inspector (the default harness), and the vendored `tools/basic-host` harness for model-context updates.
 - **No env vars.** All config is in-source.
 - **No CI configured in this repo.** Vercel auto-deploys on push to `main`.
