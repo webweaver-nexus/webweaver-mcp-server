@@ -19,6 +19,12 @@ const app = createMcpExpressApp({
   ],
 });
 
+// Vercel (and the cloudflared tunnel used for local claude.ai testing) fronts
+// the app with a single proxy hop and sets X-Forwarded-For. Without this,
+// Express falls back to the proxy's socket IP, so every caller shares one
+// rate-limit bucket and a single noisy client can 429 all other hosts.
+app.set("trust proxy", 1);
+
 app.use(
   cors({
     origin: [

@@ -8,16 +8,7 @@ import type {
   CallToolResult,
   ReadResourceResult,
 } from "@modelcontextprotocol/sdk/types.js";
-import fs from "node:fs/promises";
-import path from "node:path";
-
-// Resolve mcp-app.html location across environments:
-//   • Local dev (`npm run serve`):  <project>/dist/mcp-app.html
-//   • Vercel serverless:            /var/task/dist/mcp-app.html
-// process.cwd() returns the project root locally and /var/task on Vercel.
-// vercel.json's `includeFiles: "dist/mcp-app.html"` ensures the file is
-// bundled at /var/task/dist/mcp-app.html in production.
-const MCP_APP_HTML_PATH = path.join(process.cwd(), "dist", "mcp-app.html");
+import { MCP_APP_HTML } from "./generated/mcp-app-html.js";
 
 /**
  * Creates a new MCP server instance with all tools and resources registered.
@@ -25,7 +16,7 @@ const MCP_APP_HTML_PATH = path.join(process.cwd(), "dist", "mcp-app.html");
 export function createServer(): McpServer {
   const server = new McpServer({
     name: "WebWeaver Nexus",
-    version: "1.0.0",
+    version: "1.0.1",
   });
 
   // ── MCP App tool: join_waitlist ──────────────────────────────────────
@@ -60,14 +51,12 @@ export function createServer(): McpServer {
     waitlistResourceUri,
     { mimeType: RESOURCE_MIME_TYPE },
     async (): Promise<ReadResourceResult> => {
-      const html = await fs.readFile(MCP_APP_HTML_PATH, "utf-8");
-
       return {
         contents: [
           {
             uri: waitlistResourceUri,
             mimeType: RESOURCE_MIME_TYPE,
-            text: html,
+            text: MCP_APP_HTML,
             _meta: {
               ui: {
                 csp: {

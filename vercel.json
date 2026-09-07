@@ -14,8 +14,7 @@
   ],
   "functions": {
     "api/mcp.ts": {
-      "maxDuration": 60,
-      "includeFiles": "dist/mcp-app.html"
+      "maxDuration": 60
     }
   }
 }

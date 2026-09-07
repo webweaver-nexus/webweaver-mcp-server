@@ -6,7 +6,7 @@ An MCP server that exposes WebWeaver Nexus services — waitlist signup (with an
 
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-active-blue)](https://registry.modelcontextprotocol.io/?q=io.github.webweaver-nexus)
 
-Published to the official MCP registry as `io.github.webweaver-nexus/webweaver-mcp-server` (v1.0.0).
+Published to the official MCP registry as `io.github.webweaver-nexus/webweaver-mcp-server` (live entry: v1.0.0).
 
 ## Tools
 
@@ -18,7 +18,7 @@ Published to the official MCP registry as `io.github.webweaver-nexus/webweaver-m
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 24.x (see `engines` in `package.json`)
 - npm
 
 ## Install
@@ -33,7 +33,11 @@ npm install
 npm run build
 ```
 
-This runs TypeScript type-checking, bundles the MCP App UI with Vite + `vite-plugin-singlefile`, and emits server type declarations.
+This bundles the MCP App UI with Vite + `vite-plugin-singlefile`, type-checks the client and server, and emits the compiled server.
+
+The Vite step runs **first** and is load-bearing: a build plugin writes the bundled HTML into `generated/mcp-app-html.ts`, which `server.ts` imports. The server type-check would fail without it. `generated/` is a build artifact and is git-ignored.
+
+> During `npm run dev`, the watch build regenerates that module on every client change, but `npm run serve` loads it once at startup — restart the server to pick up UI edits.
 
 ## Run
 
@@ -44,7 +48,7 @@ npm run serve
 # Custom port
 PORT=4000 npm run serve
 
-# stdio transport (for Claude Desktop local config — see "Known Limitations")
+# stdio transport (for Claude Desktop local config)
 npm run serve:stdio
 
 # Dev mode (watch + serve)
@@ -139,7 +143,7 @@ The MCP server is deployed as a Vercel serverless function using the Express + S
 
 **How it works:**
 - `vercel.json` routes traffic to `api/mcp.ts`, which exports the Express app as `default`.
-- The Vite-bundled `dist/mcp-app.html` (the MCP App UI) is included in the deployment via `includeFiles` and read at runtime by `server.ts` via `fs.readFile`.
+- The Vite-bundled MCP App UI is compiled into the function as a string constant (`generated/mcp-app-html.ts`), so no file is read from disk at runtime.
 - The function runs on Vercel's Node.js 24 runtime with `maxDuration: 60` (well above what's needed; tool calls return in milliseconds).
 - No environment variables are required — all configuration is hardcoded in the source.
 
@@ -155,8 +159,8 @@ curl -X POST https://webweaver-nexus-mcp.vercel.app/mcp \
   -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
 
 # Resource read — should return ~330 KB of bundled HTML.
-# A response under a few KB means the unbundled source HTML is being served
-# instead of the bundled artifact (path resolution bug — see git history).
+# A response under a few KB means the unbundled source HTML was inlined
+# instead of the bundle (the build guards against this — see git history).
 curl -X POST https://webweaver-nexus-mcp.vercel.app/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
@@ -195,7 +199,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) o
 
 Restart Claude Desktop; the three tools appear in the tools menu.
 
-> The two read-only tools work in Claude Desktop. `join_waitlist` does not, due to the stdio `cwd` issue described in [Known Limitations](#known-limitations) — this is a server-side path-resolution gap, not an `mcp-remote` problem.
+> All three tools work in Claude Desktop. The `join_waitlist` stdio failure described in earlier revisions was fixed by compiling the App HTML into the server; see [Version History](#version-history).
 
 ### claude.ai (Custom Connector)
 
@@ -242,25 +246,17 @@ If the tool fires and returns text, the wire is good. For `join_waitlist`, the e
 
 ## Known Limitations
 
-### Claude Desktop stdio integration is not currently supported
+### ~~Claude Desktop stdio integration~~ — fixed in v1.0.1
 
-The two read-only tools (`get_product_overview`, `get_contact_info`) work in Claude Desktop. `join_waitlist` does not.
+**Previously:** `join_waitlist` failed under Claude Desktop with `ENOENT: no such file or directory, open '/dist/mcp-app.html'`. Claude Desktop launches MCP server processes with the working directory set to `/` on macOS, and `server.ts` located the bundled HTML via `path.join(process.cwd(), "dist", "mcp-app.html")`. The `cwd` field in `claude_desktop_config.json` was tried as a workaround but is silently ignored on the version tested.
 
-**Cause:** Claude Desktop launches MCP server processes with the working directory set to `/` (the filesystem root) on macOS. The current `server.ts` uses `path.join(process.cwd(), "dist", "mcp-app.html")` to locate the bundled HTML at runtime, which resolves to `/dist/mcp-app.html` under Claude Desktop — a path that doesn't exist. The `cwd` field in `claude_desktop_config.json` was tried as a workaround but is silently ignored on the version tested.
+**Fix:** the Vite build now writes the bundled HTML into `generated/mcp-app-html.ts`, which `server.ts` imports as a string constant. Nothing resolves a filesystem path at runtime, so the App resource behaves identically under stdio, local HTTP, and Vercel. Verified by running the server from `/` and reading the resource over stdio.
 
-**Workaround:** Use a Streamable HTTP MCP host (basic-host, claude.ai's custom connectors when MCP App rendering bugs are fixed, or other spec-compliant clients) rather than Claude Desktop's local stdio mode.
-
-**Possible fixes for future work:**
-
-1. **Embed the HTML as a build-time string constant.** Replace the runtime `fs.readFile` with an `import` (or build step) that inlines `dist/mcp-app.html` directly into the compiled JS as a string. Eliminates filesystem path resolution entirely; works identically across every host environment. Cost: small build-step change; HTML changes require a rebuild (which they already do anyway).
-
-2. **A more robust path probe** that tries `dist/`-prefixed paths first and never falls through to anywhere a same-named source file might live. The probe approach was attempted in commit e73484f and reverted in commit 32dc1aa. A Vite 8 → 7 downgrade was also tried in commit 2e33c8e (suspecting vite-plugin-singlefile incompatibility) and reverted in commit c8ad36d once we determined the actual cause was the path probe finding an unbundled source file on Vercel. See the git history around 28 April 2026 for the full diagnostic trail.
-
-The first option is recommended if you come back to this.
+Two earlier attempts are preserved in the history for context: a path probe (added in `e73484f`, reverted in `32dc1aa`) that resolved to an unbundled source file on Vercel, and a Vite 8 → 7 downgrade (`2e33c8e`, reverted in `c8ad36d`) that chased the wrong cause. The build now fails loudly if the unbundled source HTML is ever inlined by mistake.
 
 ### claude.ai `frameDomains` bug
 
-See note in the "Testing with Claude Desktop (Custom Connector)" section above.
+See the note under [Exposing local dev to claude.ai](#exposing-local-dev-to-claudeai-cloudflare-tunnel).
 
 
 ## Project Structure
@@ -274,6 +270,7 @@ See note in the "Testing with Claude Desktop (Custom Connector)" section above.
 │   ├── mcp-app.ts       # Client-side App lifecycle + Tally integration
 │   ├── mcp-app.css      # App-specific styles
 │   └── global.css       # Host variable fallbacks & reset
+├── generated/           # Build artifact — bundled HTML as a TS constant (git-ignored)
 ├── dist/                # Build output — function code + bundled mcp-app.html
 ├── vite.config.ts       # Vite + singlefile plugin config
 ├── tsconfig.json        # Client + shared type-checking
@@ -283,4 +280,6 @@ See note in the "Testing with Claude Desktop (Custom Connector)" section above.
 
 ## Version History
 
-- **v0.1.0** — First working production deployment. Three tools live; `join_waitlist` works on Streamable HTTP hosts. Claude Desktop stdio integration deferred (see Known Limitations).
+- **v1.0.1** — `join_waitlist` now works over stdio (Claude Desktop). The App HTML is compiled into the server instead of read from disk, removing the `process.cwd()` dependency. Rate limiting is now per-client: `trust proxy` was unset, so every caller shared a single 60/min bucket behind Vercel's proxy.
+- **v1.0.0** — Published to the official MCP registry as `io.github.webweaver-nexus/webweaver-mcp-server`. Endpoint hardened with a CORS allowlist and rate limiting.
+- **v0.1.0** — First working production deployment. Three tools live; `join_waitlist` works on Streamable HTTP hosts. Claude Desktop stdio integration deferred.

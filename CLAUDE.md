@@ -52,11 +52,13 @@ These are the places hardcoded values live. There are no env vars; don't go hunt
 | Allowed Host headers | `api/mcp.ts` (`allowedHosts` array) | New deploy domains (preview URLs, alternate prod domains) must be added here or requests get rejected. |
 | Server name/version | `server.ts` (`new McpServer({ name, version })`) | Reported to hosts on `initialize`. |
 | App name/version | `src/mcp-app.ts` (`new App({ name, version })`) | Reported during the App handshake with the host. |
-| Vercel runtime + included files | `vercel.json` | `includeFiles: "dist/mcp-app.html"` is load-bearing — without it the bundled HTML isn't present in the serverless function. |
+| Vercel runtime | `vercel.json` | `maxDuration` + routing only. `includeFiles` was removed once the HTML was compiled into the function. |
+| CORS allowlist, rate limit, `trust proxy` | `api/mcp.ts` | Applies to local dev too — `main.ts` serves this same Express app. `trust proxy` is load-bearing: without it every caller shares one rate-limit bucket behind Vercel's proxy. |
 
 ## Known sharp edges
 
-- **`dist/mcp-app.html` is read at runtime via `fs.readFile(path.join(process.cwd(), "dist", "mcp-app.html"))`** in `server.ts`. This works on local dev and on Vercel (where `cwd` is `/var/task`) but breaks under Claude Desktop's stdio mode, which launches the server with `cwd=/`. The recommended fix (per the README's "Possible fixes for future work") is to inline the bundled HTML as a build-time string constant, eliminating filesystem path resolution. If you're touching this code path, prefer that direction over more elaborate path probes — the probe approach was tried and reverted (see git history around 28 April 2026).
+- **The App HTML is compiled in, not read from disk.** `server.ts` imports `MCP_APP_HTML` from `generated/mcp-app-html.ts`, which a `vite.config.ts` build plugin writes from `dist/mcp-app.html` on every build. Don't reintroduce a runtime `fs.readFile` or a path probe: the old `process.cwd()` lookup broke under stdio (`cwd=/`), and the probe that replaced it resolved to the *unbundled* source HTML on Vercel (tried and reverted around 28 April 2026). The plugin throws if the HTML it's about to inline still references `/src/mcp-app.ts`, which is the signature of that regression.
+- **`generated/` is git-ignored, so build order matters.** `npm run build` runs Vite *before* the server type-check for this reason; on a fresh clone `server.ts` won't type-check until you've built once. `npm run serve` loads the constant at startup, so UI edits need a server restart (the old `fs.readFile` picked them up per-request).
 - **claude.ai custom connectors currently ignore `frameDomains`** declared in `_meta.ui.csp` (upstream issue `anthropics/claude-ai-mcp#40`). The Tally embed in `join_waitlist` is blocked there until that's fixed; the two read-only tools work fine. Don't attempt to "fix" this from our side — it's a host bug.
 - **`StreamableHTTPServerTransport` is constructed per-request** in `api/mcp.ts` with `sessionIdGenerator: undefined` (no session reuse). If you add stateful tools that need per-session memory, this is the place to revisit — currently every request is independent.
 
@@ -64,8 +66,8 @@ These are the places hardcoded values live. There are no env vars; don't go hunt
 
 - `tsconfig.json` — client + shared type-checking (the App UI in `src/`).
 - `tsconfig.server.json` — emits `.d.ts` and compiled JS for the server (`server.ts`, `main.ts`, `api/mcp.ts`).
-- `vite.config.ts` — bundles the App UI, picks input from `INPUT` env var (`mcp-app.html`).
-- The full build (`npm run build`): typecheck client → typecheck server → Vite bundle → emit server JS. Order matters: Vercel needs both `dist/mcp-app.html` and the compiled server.
+- `vite.config.ts` — bundles the App UI (input from the `INPUT` env var), and hosts the `webweaver:inline-app-html` plugin that emits `generated/mcp-app-html.ts`.
+- The full build (`npm run build`): Vite bundle (+ inline HTML into `generated/`) → typecheck client → typecheck server → emit server JS. Order matters: the server type-check depends on the generated module.
 
 ## What's not here
 
