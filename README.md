@@ -6,7 +6,7 @@ An MCP server that exposes WebWeaver Nexus services — waitlist signup (with an
 
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-active-blue)](https://registry.modelcontextprotocol.io/?q=io.github.webweaver-nexus)
 
-Published to the official MCP registry as `io.github.webweaver-nexus/webweaver-mcp-server` (live entry: v1.0.0).
+Published to the official MCP registry as `io.github.webweaver-nexus/webweaver-mcp-server`. See [Publishing to the MCP registry](#publishing-to-the-mcp-registry).
 
 ## Tools
 
@@ -192,6 +192,21 @@ curl -X POST https://webweaver-nexus-mcp.vercel.app/mcp \
 ```
 
 For an interactive equivalent, run MCP Inspector against the deployed URL (see [Testing with MCP Inspector](#testing-with-mcp-inspector-quick-smoke-test) above). Recommended as the first post-deploy check before bringing up basic-host.
+
+## Publishing to the MCP registry
+
+The registry entry is `io.github.webweaver-nexus/webweaver-mcp-server`, defined by `server.json`. Publishing is **manual dispatch only** — run the **Publish to MCP Registry** workflow from the Actions tab.
+
+```bash
+# validate locally before dispatching
+mcp-publisher validate
+```
+
+**Why CI rather than publishing from your laptop.** `mcp-publisher login github` grants an org namespace only when GitHub reports you as an org **Owner** via `GET /user/memberships/orgs?state=active` — the registry requires `role == "admin"` (see `internal/api/handlers/v0/auth/github_at.go` upstream). That lookup returns nothing for this org even though the account *is* an Owner with public membership and the org's third-party policy is not the cause, so a personal login yields only `io.github.<user>/*` and the publish fails with 403.
+
+GitHub Actions OIDC sidesteps it: the registry derives the namespace from the `repository_owner` claim, which is `webweaver-nexus` for this repo, granting `io.github.webweaver-nexus/*` directly. The workflow needs `id-token: write`.
+
+Bump `version` in `server.json` before dispatching — the registry rejects a re-publish of an existing version.
 
 ## Install in your MCP client
 
