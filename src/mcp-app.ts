@@ -58,37 +58,64 @@ const ctx = app.getHostContext();
 if (ctx) handleHostContextChanged(ctx);
 
 // ── Load the Tally embed script ────────────────────────────────────────
-// Tally's loader finds all iframes with data-tally-src and wires up
-// dynamic height + postMessage events.
+// Tally's loader finds iframes with data-tally-src and swaps in a real src,
+// wiring up dynamic height + postMessage events. It does NOT do this on its
+// own: the script only assigns window.Tally and handles popup config, so
+// loadEmbeds() has to be called explicitly or the iframe keeps its
+// data-tally-src, never gets a src, and the form silently never renders.
 const tallyScript = document.createElement("script");
 tallyScript.src = "https://tally.so/widgets/embed.js";
 tallyScript.async = true;
+tallyScript.onload = () => {
+  if (!window.Tally) {
+    console.error("[mcp-app] Tally embed script loaded but window.Tally is missing.");
+    return;
+  }
+  window.Tally.loadEmbeds();
+};
+tallyScript.onerror = () => {
+  console.error("[mcp-app] Failed to load the Tally embed script.");
+};
 document.head.appendChild(tallyScript);
 
 // ── Listen for Tally form submission ───────────────────────────────────
 window.addEventListener("message", async (event: MessageEvent) => {
   if (typeof event.data !== "string") return;
 
+  let payload: { event?: string; payload?: { formId?: string } };
   try {
-    const payload = JSON.parse(event.data);
-    if (
-      payload.event === "Tally.FormSubmitted" &&
-      payload.payload?.formId === TALLY_FORM_ID
-    ) {
-      // Show local confirmation
-      confirmationEl.hidden = false;
-
-      // Notify the MCP host so the model knows the user signed up
-      await app.updateModelContext({
-        content: [
-          {
-            type: "text",
-            text: "The user has successfully submitted the WebWeaver Nexus waitlist form.",
-          },
-        ],
-      });
-    }
+    payload = JSON.parse(event.data);
   } catch {
     // Not a JSON message — ignore
+    return;
   }
+
+  if (
+    payload.event !== "Tally.FormSubmitted" ||
+    payload.payload?.formId !== TALLY_FORM_ID
+  ) {
+    return;
+  }
+
+  // Show local confirmation
+  confirmationEl.hidden = false;
+
+  // Notify the MCP host so the model knows the user signed up. Not every host
+  // accepts context updates — MCP Inspector, for one, never registers a
+  // handler — so check the capability rather than letting the call reject.
+  if (!app.getHostCapabilities()?.updateModelContext) {
+    console.info(
+      "[mcp-app] Host does not accept model context updates; skipping.",
+    );
+    return;
+  }
+
+  await app.updateModelContext({
+    content: [
+      {
+        type: "text",
+        text: "The user has successfully submitted the WebWeaver Nexus waitlist form.",
+      },
+    ],
+  });
 });

@@ -16,7 +16,7 @@ import { MCP_APP_HTML } from "./generated/mcp-app-html.js";
 export function createServer(): McpServer {
   const server = new McpServer({
     name: "WebWeaver Nexus",
-    version: "1.0.1",
+    version: "1.0.2",
   });
 
   // ── MCP App tool: join_waitlist ──────────────────────────────────────
