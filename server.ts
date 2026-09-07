@@ -38,7 +38,7 @@ export function createServer(): McpServer {
         content: [
           {
             type: "text",
-            text: "The WebWeaver Nexus waitlist form is now displayed. Fill it out to join the early-access list.",
+            text: 'The WebWeaver Nexus contact form is now displayed. Fill it out to secure your priority booking for our "AI-Ready" Discovery & Audit or enquire about a particular part of our services.',
           },
         ],
       };

@@ -89,7 +89,7 @@ Click **Connect**, then verify across tabs:
 
 1. **Tools** — all 3 tools appear (`join_waitlist`, `get_product_overview`, `get_contact_info`); the two plain tools return their text when called.
 2. **Resources** — `ui://join-waitlist/mcp-app.html` lists; reading it returns ~435 KB of bundled HTML.
-3. **Apps** — select `join_waitlist`; the Tally form renders inside its sandboxed iframe. Inspector builds a real CSP from our `_meta.ui.csp`, so this genuinely exercises `resourceDomains` / `frameDomains` / `connectDomains`.
+3. **Apps** — select `join_waitlist`; the Tally form renders inside its sandboxed iframe. Inspector builds a real CSP from our `_meta.ui.csp`, so this genuinely exercises `resourceDomains` / `frameDomains` / `connectDomains`. The form **renders** here but is **not fully interactive** — see [Inspector strips `allow-same-origin`](#mcp-inspector-strips-allow-same-origin) below.
 
 There is also a CLI, which makes post-deploy checks scriptable without a browser:
 
@@ -137,7 +137,8 @@ cd tools/basic-host && SERVERS='["https://webweaver-nexus-mcp.vercel.app/mcp"]' 
 |------|-----|
 | "Is the server reachable? Do tools list?" | Inspector (`--cli` for scripts) |
 | "Do the plain tools return the right text?" | Inspector |
-| "Does the Tally form render inside the CSP sandbox?" | Inspector |
+| "Does the Tally form render inside the CSP sandbox?" | Inspector (renders, but not fully interactive) |
+| "Can a user actually complete and submit the form?" | basic-host or the deployed site |
 | "Does `app.updateModelContext()` reach the host?" | basic-host — Inspector cannot |
 | Fastest post-deploy sanity check | Inspector `--cli` |
 
@@ -275,6 +276,18 @@ If the tool fires and returns text, the wire is good. For `join_waitlist`, the e
 **Fix:** the Vite build now writes the bundled HTML into `generated/mcp-app-html.ts`, which `server.ts` imports as a string constant. Nothing resolves a filesystem path at runtime, so the App resource behaves identically under stdio, local HTTP, and Vercel. Verified by running the server from `/` and reading the resource over stdio.
 
 Two earlier attempts are preserved in the history for context: a path probe (added in `e73484f`, reverted in `32dc1aa`) that resolved to an unbundled source file on Vercel, and a Vite 8 → 7 downgrade (`2e33c8e`, reverted in `c8ad36d`) that chased the wrong cause. The build now fails loudly if the unbundled source HTML is ever inlined by mistake.
+
+### MCP Inspector strips `allow-same-origin`
+
+In Inspector's **Apps** tab the Tally form renders and text inputs work, but the dropdown has no default and will not open, and the checkboxes cannot be ticked. The form cannot be completed there.
+
+**Cause — host-side, not ours.** Inspector's sandbox proxy states it in its own source: the app iframe is sandboxed *without* `allow-same-origin`, so the app runs under an opaque (`null`) origin, and `allow-same-origin` is "always stripped from a server-supplied value". Sandbox flags are inherited by nested iframes, so Tally's own iframe inherits the opaque origin, its client-side JS cannot reach same-origin storage, and its interactive controls fail. Native text inputs need no JS, which is why they still work.
+
+Confirmed by an A/B test: two iframes loading the same Tally embed URL, differing only in `allow-same-origin`. With the flag, the dropdown carries its default and the controls work; without it, the dropdown shows "Please Select an Option" and the controls are dead — matching Inspector exactly. The same embed works in `tools/basic-host` (`allow-scripts allow-same-origin allow-forms`) and on the landing page (no sandbox).
+
+**Do not "fix" this with `_meta.ui.domain`.** Inspector does grant `allow-same-origin` to apps declaring that field, but the spec is explicit that its format is *host-dependent* (`{hash}.claudemcpcontent.com`, `www-example-com.oaiusercontent.com`). The value is assigned by each host, so guessing one satisfies Inspector at the risk of breaking others.
+
+Use Inspector to confirm the App renders and the CSP is honoured. Use `tools/basic-host` or the live site to exercise the form itself.
 
 ### claude.ai `frameDomains` bug
 
