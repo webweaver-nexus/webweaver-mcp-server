@@ -49,6 +49,7 @@ These are the places hardcoded values live. There are no env vars; don't go hunt
 | What | Where | Notes |
 |---|---|---|
 | Tally form ID | `src/mcp-app.ts` (`TALLY_FORM_ID` const) **and** `mcp-app.html` (`data-tally-src` URL) | **Must match in both files.** The TS const is checked against incoming `Tally.FormSubmitted` events; the HTML attribute is what Tally's loader reads. |
+| Tally embed theme | `mcp-app.html` (`transparentBackground=0`) **and** `src/mcp-app.css` (`color-scheme: light` on `#tally-container`) | Change together. Tally's form does not follow the host theme, so a transparent background leaves labels and inputs dark-on-dark in dark hosts. Same fix as the landing page embed. |
 | Allowed Host headers | `api/mcp.ts` (`ALLOWED_HOSTS` array) | Strings match exactly, regexes match patterns (Vercel previews, `*.trycloudflare.com`). New deploy domains must be added here or requests 403. Anchor any regex you add — `.vercel.app` unanchored would match `evil-....vercel.app.attacker.com`. |
 | Server name/version | `server.ts` (`new McpServer({ name, version })`) | Reported to hosts on `initialize`. |
 | App name/version | `src/mcp-app.ts` (`new App({ name, version })`) | Reported during the App handshake with the host. |

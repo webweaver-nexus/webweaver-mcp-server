@@ -69,6 +69,8 @@ Before deploying, update the Tally form ID:
 
 Tally's `embed.js` does **not** populate embeds by itself — `src/mcp-app.ts` has to call `window.Tally.loadEmbeds()` once the script loads, or the iframe keeps its `data-tally-src`, never gets a `src`, and the form silently renders as blank space.
 
+Two settings keep the form readable in dark hosts and should be changed together: `transparentBackground=0` in the `data-tally-src` URL, and `color-scheme: light` on `#tally-container` in `src/mcp-app.css`. Tally's form styling does not follow the host theme, so with a transparent background its labels and inputs end up dark-on-dark. This mirrors the fix applied to the landing page embed.
+
 ## Testing with MCP Inspector (default harness)
 
 [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) is the official MCP debugger and the right tool for almost every check here. Verified against **v2.5.0**.

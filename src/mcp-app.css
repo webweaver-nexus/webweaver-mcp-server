@@ -17,6 +17,15 @@ h2 {
 
 #tally-container {
   min-height: 0;
+
+  /* The embedded Tally form does not follow the host's dark theme: its labels
+     and inputs stay dark, which leaves them unreadable on a dark surface. Pin
+     the subtree to a light scheme and let Tally paint its own background
+     (transparentBackground=0 in mcp-app.html) so the form reads as a light
+     card, matching the fix applied to the landing page embed. */
+  color-scheme: light;
+  border-radius: var(--border-radius-md);
+  overflow: hidden;
 }
 
 .confirmation {
