@@ -29,7 +29,7 @@ export function createServer(): McpServer {
     {
       title: "Join Waitlist",
       description:
-        "Opens the WebWeaver Nexus waitlist signup form. Users can submit their details to join the early-access list.",
+        'Opens the WebWeaver Nexus contact form. Use it to secure a priority booking for the "AI-Ready" Discovery & Audit, join the early-access waitlist, or enquire about a particular service.',
       inputSchema: {},
       _meta: { ui: { resourceUri: waitlistResourceUri } },
     },
