@@ -222,7 +222,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) o
 
 Restart Claude Desktop; the three tools appear in the tools menu.
 
-> All three tools work in Claude Desktop. The `join_waitlist` stdio failure described in earlier revisions was fixed by compiling the App HTML into the server; see [Version History](#version-history).
+> The two read-only tools work. `join_waitlist` renders its App shell — heading, subtitle, host theme — but the embedded Tally form does not load, because Claude Desktop ignores `frameDomains`; see [Hosts that ignore `frameDomains`](#hosts-that-ignore-framedomains). Note this config proxies to the deployed server over HTTP via `mcp-remote`, so it never exercised the stdio `cwd` bug fixed in v1.0.1 — that bug only applied to a config launching this server as a local stdio process.
 
 ### claude.ai (Custom Connector)
 
@@ -289,9 +289,30 @@ Confirmed by an A/B test: two iframes loading the same Tally embed URL, differin
 
 Use Inspector to confirm the App renders and the CSP is honoured. Use `tools/basic-host` or the live site to exercise the form itself.
 
-### claude.ai `frameDomains` bug
+### Hosts that ignore `frameDomains`
 
-See the note under [Exposing local dev to claude.ai](#exposing-local-dev-to-claudeai-cloudflare-tunnel).
+**Affects claude.ai custom connectors and Claude Desktop.** Both render the `join_waitlist` App shell correctly but leave the Tally form as blank space: the host ignores the `frameDomains` we declare in `_meta.ui.csp`, so the nested `tally.so` iframe is blocked. Upstream issue [`anthropics/claude-ai-mcp#40`](https://github.com/anthropics/claude-ai-mcp/issues/40). The two read-only tools are unaffected.
+
+Claude Desktop is the same stack — its `initialize` sends `clientInfo.name: "claude-ai (via mcp-remote …)"` — so it inherits the same bug. It does advertise MCP Apps support (`extensions["io.modelcontextprotocol/ui"]` with `text/html;profile=mcp-app`), and the MCP log shows `resources/read` and `tools/call` both returning normally, which is why this presents as a rendering failure rather than a protocol one.
+
+**Confirmed from Claude Desktop's DevTools console:**
+
+```
+Framing 'https://tally.so/' violates the following Content Security Policy
+directive: "frame-src 'self' blob: data:". The request has been blocked.
+```
+
+Only `frameDomains` is dropped — the other two declarations survive. The App frame is loaded with them in its query string:
+
+```
+mcp_apps?connect-src=https%3A%2F%2Ftally.so&resource-src=https%3A%2F%2Ftally.so+https%3A%2F%2Fassets.claude.ai
+```
+
+There is no `frame-src` parameter, so the policy falls back to `frame-src 'self' blob: data:`. Tally's loader does run (`iframe-resizer v5.5.9` appears in the console) and the app requests the correct embed URL — the host blocks the frame, nothing upstream of it. Identical on both transports, `mcp-remote` over HTTP and a local stdio config, as expected for a renderer-side block.
+
+Don't attempt to work around it server-side — there is nothing to fix in this repo.
+
+**The wider pattern.** Every host that has been tried degrades the third-party embed somehow: Inspector strips `allow-same-origin` so Tally's controls die, and these two block the frame outright. Only `tools/basic-host` and the landing page render it fully. If `join_waitlist` needs to work in Anthropic's own clients, the durable answer is a native form in the App posting to Tally's API — `connectDomains` already permits `tally.so` — rather than embedding Tally's iframe.
 
 
 ## Project Structure
