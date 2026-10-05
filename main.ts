@@ -8,7 +8,7 @@
  * On Vercel, this file is not executed; api/mcp.ts is invoked directly.
  */
 
-import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import app from "./api/mcp.js";
 import { createServer } from "./server.js";
 
@@ -23,7 +23,11 @@ try {
 }
 
 if (process.argv.includes("--stdio")) {
-  await createServer().connect(new StdioServerTransport());
+  // The factory runs once per connection (plus once for a discarded
+  // `server/discover` probe if the client negotiates). `legacy` defaults to
+  // 'serve' here — note the stdio option values differ from the HTTP handler's
+  // 'stateless' | 'reject'.
+  serveStdio(() => createServer());
 } else {
   const port = parseInt(process.env.PORT ?? "3001", 10);
 

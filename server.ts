@@ -57,7 +57,7 @@ function submitResult(outcome: SubmitOutcome, text: string): CallToolResult {
 export function createServer(): McpServer {
   const server = new McpServer({
     name: "WebWeaver Nexus",
-    version: "2.0.0",
+    version: "2.1.0",
   });
 
   // ── MCP App tool: get_contact_form ───────────────────────────────────
