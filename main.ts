@@ -8,7 +8,7 @@
  * On Vercel, this file is not executed; api/mcp.ts is invoked directly.
  */
 
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import app from "./api/mcp.js";
 import { createServer } from "./server.js";
 

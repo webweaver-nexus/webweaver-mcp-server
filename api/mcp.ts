@@ -3,8 +3,8 @@
  * Exports the Express app as default; Vercel handles request injection.
  */
 
-import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { NodeStreamableHTTPServerTransport } from "@modelcontextprotocol/node";
+import { createMcpExpressApp } from "@modelcontextprotocol/express";
 import cors from "cors";
 import type { NextFunction, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
@@ -95,7 +95,7 @@ app.use(
 
 app.all("/mcp", async (req: Request, res: Response) => {
   const server = createServer();
-  const transport = new StreamableHTTPServerTransport({
+  const transport = new NodeStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
   });
 
