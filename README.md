@@ -4,6 +4,8 @@ An MCP server that exposes WebWeaver Nexus services — a contact form (rendered
 
 **Production URL:** `https://webweaver-nexus-mcp.vercel.app/mcp` — Streamable HTTP, public, no authentication.
 
+The bare hostname serves a static signposting page (`public/index.html`). Only `/mcp` is routed to the function, so opening the endpoint itself in a browser returns `406 Not Acceptable` — that is correct content negotiation, not a fault.
+
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-active-blue)](https://registry.modelcontextprotocol.io/?q=io.github.webweaver-nexus)
 
 Published to the official MCP registry as `io.github.webweaver-nexus/webweaver-mcp-server`. See [Publishing to the MCP registry](#publishing-to-the-mcp-registry).
@@ -410,6 +412,8 @@ That is host courtesy, not enforcement. **`tools/list` returns the tool to every
 
 ├── api/
 │   └── mcp.ts           # Vercel serverless entry — exports Express app
+├── public/
+│   └── index.html       # Static landing page served at / (not part of the MCP server)
 ├── main.ts              # Local-dev entry — HTTP & stdio transports
 ├── server.ts            # Tool & resource registration (shared)
 ├── mcp-app.html         # App UI template (Vite entry, source)

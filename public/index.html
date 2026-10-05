@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<!--
+  Static landing page for the MCP server's root URL.
+
+  This deployment is an API endpoint: only /mcp is routed to the function, so
+  the root used to return Vercel's "This page doesn't exist". Anyone told about
+  this server tries the bare hostname first, and a 404 reads as broken rather
+  than as "the endpoint is one path along".
+
+  Deliberately static and dependency-free — no build step, no framework, no
+  external requests. It must never be able to break the MCP function.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <title>WebWeaver Nexus — MCP Server</title>
+  <meta name="description" content="An MCP server exposing WebWeaver Nexus services — contact form, product overview and contact links — to AI hosts such as Claude Desktop and ChatGPT.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🕸️</text></svg>">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --text: light-dark(#1f2937, #e5e7eb);
+      --muted: light-dark(#6b7280, #9ca3af);
+      --bg: light-dark(#ffffff, #0f1115);
+      --surface: light-dark(#f6f7f9, #171a21);
+      --border: light-dark(#e5e7eb, #2a2f3a);
+      --accent: light-dark(#1d4ed8, #7aa2f7);
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 3rem 1rem 4rem;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    main { max-width: 46rem; margin: 0 auto; }
+    h1 { font-size: 1.75rem; line-height: 1.2; margin: 0 0 .5rem; }
+    h2 { font-size: 1.05rem; margin: 2.5rem 0 .75rem; }
+    .lede { color: var(--muted); margin: 0 0 2rem; font-size: 1.05rem; }
+    a { color: var(--accent); }
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .9em;
+    }
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: .9rem 1rem;
+      overflow-x: auto;
+      margin: 0;
+    }
+    .endpoint { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+    .endpoint pre { flex: 1 1 22rem; }
+    button {
+      font: inherit;
+      padding: .55rem .9rem;
+      color: var(--text);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      cursor: pointer;
+    }
+    button:hover { border-color: var(--accent); }
+    table { border-collapse: collapse; width: 100%; }
+    th, td {
+      text-align: left;
+      padding: .5rem .75rem .5rem 0;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    th { font-weight: 600; white-space: nowrap; }
+    td.desc { color: var(--muted); }
+    .note {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: var(--radius);
+      padding: .9rem 1rem;
+      color: var(--muted);
+    }
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: .9rem;
+    }
+    footer a { margin-right: 1rem; white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>WebWeaver Nexus — MCP Server</h1>
+    <p class="lede">
+      A Model Context Protocol server that lets AI assistants reach WebWeaver
+      Nexus directly — read what we do, get in touch, and fill in our contact
+      form without leaving the conversation.
+    </p>
+
+    <div class="note">
+      This page is just signposting. The server itself lives at
+      <code>/mcp</code> and speaks JSON-RPC, so opening it in a browser returns
+      <code>406 Not Acceptable</code> rather than a web page. That is the
+      endpoint working correctly, not an error.
+    </div>
+
+    <h2>Endpoint</h2>
+    <div class="endpoint">
+      <pre id="endpoint">https://webweaver-nexus-mcp.vercel.app/mcp</pre>
+      <button type="button" id="copy">Copy</button>
+    </div>
+    <p class="lede" style="margin:.75rem 0 0; font-size:.95rem;">
+      Streamable HTTP. Public, no authentication required.
+    </p>
+
+    <h2>Tools</h2>
+    <table>
+      <tr>
+        <th><code>get_contact_form</code></th>
+        <td class="desc">Renders our contact form as an interactive panel inside the assistant.</td>
+      </tr>
+      <tr>
+        <th><code>get_product_overview</code></th>
+        <td class="desc">What WebWeaver Nexus does, and who we build for.</td>
+      </tr>
+      <tr>
+        <th><code>get_contact_info</code></th>
+        <td class="desc">Contact methods and links.</td>
+      </tr>
+    </table>
+
+    <h2>Adding it to a client</h2>
+    <p class="lede" style="font-size:.95rem;">
+      In Claude Desktop or claude.ai, add a custom connector pointing at the
+      endpoint above. For clients that only speak stdio, bridge it:
+    </p>
+    <pre>npx -y mcp-remote https://webweaver-nexus-mcp.vercel.app/mcp</pre>
+
+    <div class="note" style="margin-top:2rem;">
+      <strong>This server is our own Tier 3 deliverable.</strong> It is a
+      working example of what we build for clients — securely connecting
+      external AI assistants to a business's own services. Showing it, rather
+      than just describing it.
+    </div>
+
+    <footer>
+      <a href="https://webweaver-nexus.vercel.app/">Website</a>
+      <a href="https://webweaver-nexus.vercel.app/#contact">Contact</a>
+      <a href="https://github.com/webweaver-nexus/webweaver-mcp-server">Source</a>
+      <a href="https://registry.modelcontextprotocol.io/">MCP Registry</a>
+    </footer>
+  </main>
+
+  <script>
+    // Progressive enhancement only: the endpoint is selectable text without it.
+    document.getElementById("copy").addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      try {
+        await navigator.clipboard.writeText(
+          document.getElementById("endpoint").textContent.trim(),
+        );
+        button.textContent = "Copied";
+      } catch {
+        button.textContent = "Copy failed";
+      }
+      setTimeout(() => { button.textContent = "Copy"; }, 2000);
+    });
+  </script>
+</body>
+</html>
