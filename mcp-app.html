@@ -4,29 +4,103 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="light dark">
-  <title>Join the WebWeaver Nexus Waitlist</title>
+  <title>Contact WebWeaver Nexus</title>
 </head>
 <body>
   <main class="main">
-    <h2>Join the Waitlist</h2>
-    <p class="subtitle">Join our exclusive waitlist today to secure your priority booking for our "AI-Ready" Discovery & Audit or feel free to enquire about a particular part of our services. Either way, we look forward to chatting with you first in a brief Discovery video call.</p>
-    <div id="tally-container">
-      <!-- Tally embed loads here via the loader script -->
-      <iframe
-        data-tally-src="https://tally.so/embed/3xGZlk?alignLeft=1&hideTitle=1&transparentBackground=0&dynamicHeight=1"
-        loading="lazy"
-        width="100%"
-        height="300"
-        frameborder="0"
-        marginheight="0"
-        marginwidth="0"
-        title="WebWeaver Nexus Waitlist"
-      ></iframe>
+    <!--
+      Deliberately not a <form> element. A host that sandboxes this iframe
+      without `allow-forms` blocks form submission outright, so an onsubmit
+      handler would never fire; submission is driven from a click handler and
+      an explicit Enter keydown instead. role="form" keeps the grouping
+      exposed to assistive technology.
+    -->
+    <div id="contact-form" role="form" aria-labelledby="form-heading">
+      <h2 id="form-heading">Contact Us</h2>
+      <p class="subtitle">
+        Secure your priority booking for our "AI-Ready" Discovery &amp; Audit,
+        or enquire about a particular part of our services. Either way, we look
+        forward to chatting with you first in a brief Discovery video call.
+      </p>
+
+      <div class="field">
+        <label for="fullName" id="fullName-label">Full Name</label>
+        <input id="fullName" name="fullName" type="text" autocomplete="name"
+               aria-required="true" aria-describedby="fullName-error">
+        <p class="field-error" id="fullName-error" role="alert" hidden></p>
+      </div>
+
+      <div class="field">
+        <label for="email" id="email-label">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email"
+               inputmode="email" aria-required="true" aria-describedby="email-error">
+        <p class="field-error" id="email-error" role="alert" hidden></p>
+      </div>
+
+      <div class="field">
+        <label for="company" id="company-label">Company (optional)</label>
+        <input id="company" name="company" type="text" autocomplete="organization"
+               aria-describedby="company-error">
+        <p class="field-error" id="company-error" role="alert" hidden></p>
+      </div>
+
+      <div class="field">
+        <label for="primaryGoal" id="primaryGoal-label">What is your primary goal?</label>
+        <!-- Options are populated from the vendored contract at runtime. -->
+        <select id="primaryGoal" name="primaryGoal" aria-required="true"
+                aria-describedby="primaryGoal-error"></select>
+        <p class="field-error" id="primaryGoal-error" role="alert" hidden></p>
+      </div>
+
+      <div class="field">
+        <span class="field-heading" id="privacyPolicy-label">Privacy Policy</span>
+        <div class="checkbox-row">
+          <input id="consentPrivacy" name="consentPrivacy" type="checkbox"
+                 aria-required="true" aria-describedby="consentPrivacy-error">
+          <label for="consentPrivacy" id="consent-text"></label>
+        </div>
+        <p class="field-error" id="consentPrivacy-error" role="alert" hidden></p>
+      </div>
+
+      <!--
+        Hidden until a goal is chosen, and hidden again for Tier 3 goals, which
+        the programme excludes. Mirrors the landing page form exactly.
+      -->
+      <div class="field" id="founding-field" hidden>
+        <span class="field-heading">Founding Client (optional)</span>
+        <div class="checkbox-row">
+          <input id="foundingClient" name="foundingClient" type="checkbox">
+          <label for="foundingClient" id="founding-text"></label>
+        </div>
+      </div>
+
+      <p class="form-error" id="form-error" role="alert" hidden></p>
+
+      <button type="button" id="submit" class="submit">Contact Us</button>
     </div>
 
-    <p id="confirmation" class="confirmation" hidden>
-      You're on the list! We'll be in touch soon.
-    </p>
+    <!-- Shown instead of the form when the host cannot proxy tool calls. -->
+    <div id="fallback" hidden>
+      <h2>Contact Us</h2>
+      <p class="subtitle">
+        This app cannot submit the form from here, so please continue on our
+        website — it takes a moment and reaches us the same way.
+      </p>
+      <button type="button" id="fallback-open" class="submit" hidden>
+        Open the contact form
+      </button>
+      <p class="fallback-url" id="fallback-url" hidden></p>
+    </div>
+
+    <div id="confirmation" role="status" class="confirmation" hidden>
+      <h3 id="confirmation-heading" tabindex="-1">Thanks — we've got your enquiry</h3>
+      <!--
+        Deliberately does not promise a confirmation email: until a sending
+        domain is verified, RESEND_SEND_TO_LEAD is off upstream and the welcome
+        email is routed internally rather than to the enquirer.
+      -->
+      <p>We'll be in touch shortly to arrange a brief Discovery video call.</p>
+    </div>
   </main>
   <script type="module" src="/src/mcp-app.ts"></script>
 </body>

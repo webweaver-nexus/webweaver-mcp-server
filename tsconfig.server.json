@@ -12,5 +12,11 @@
     "esModuleInterop": true,
     "resolveJsonModule": true
   },
-  "include": ["server.ts", "main.ts", "api/**/*.ts", "generated/**/*.ts"]
+  "include": [
+    "server.ts",
+    "main.ts",
+    "api/**/*.ts",
+    "generated/**/*.ts",
+    "src/contact-contract.ts"
+  ]
 }

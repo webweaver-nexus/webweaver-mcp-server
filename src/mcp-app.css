@@ -1,3 +1,9 @@
+/* Form controls are styled from the host's variables where it sends them
+   (applyHostStyleVariables) and from the light-dark() fallbacks in global.css
+   otherwise. Nothing here pins a colour scheme: the old #tally-container block
+   forced `color-scheme: light` only because Tally's embedded form ignored the
+   host theme, and that embed is gone. */
+
 .main {
   padding: var(--spacing-lg);
   max-width: 600px;
@@ -15,24 +21,146 @@ h2 {
   opacity: 0.7;
 }
 
-#tally-container {
-  min-height: 0;
+/* ── Fields ──────────────────────────────────────────────────────────── */
 
-  /* The embedded Tally form does not follow the host's dark theme: its labels
-     and inputs stay dark, which leaves them unreadable on a dark surface. Pin
-     the subtree to a light scheme and let Tally paint its own background
-     (transparentBackground=0 in mcp-app.html) so the form reads as a light
-     card, matching the fix applied to the landing page embed. */
-  color-scheme: light;
-  border-radius: var(--border-radius-md);
-  overflow: hidden;
+.field {
+  margin-bottom: var(--spacing-md);
 }
 
+.field label,
+.field-heading {
+  display: block;
+  margin-bottom: var(--spacing-sm);
+  font-weight: var(--font-weight-bold);
+}
+
+input[type="text"],
+input[type="email"],
+select {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font: inherit;
+  color: inherit;
+  background: var(--color-background-primary);
+  border: var(--border-width-regular) solid var(--color-border);
+  border-radius: var(--border-radius-md);
+}
+
+/* The native select popup and the checkbox glyphs are painted by the browser
+   from the inherited colour scheme, which global.css sets to `light dark`.
+   Without that they render light-on-light in dark hosts. */
+select {
+  appearance: none;
+  padding-right: calc(var(--spacing-md) * 2);
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    right var(--spacing-md) center,
+    right calc(var(--spacing-md) - 5px) center;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-ring-primary);
+  outline-offset: 2px;
+}
+
+[aria-invalid="true"] {
+  border-color: var(--color-error);
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+}
+
+.checkbox-row input[type="checkbox"] {
+  flex: none;
+  /* Line up with the first line of the label rather than the top of the box. */
+  margin-top: 0.2em;
+  width: 1em;
+  height: 1em;
+  accent-color: var(--color-ring-primary);
+}
+
+.checkbox-row label {
+  margin: 0;
+  font-weight: var(--font-weight-normal);
+}
+
+/* ── Errors ──────────────────────────────────────────────────────────── */
+
+.field-error,
+.form-error {
+  margin: var(--spacing-sm) 0 0;
+  color: var(--color-error);
+}
+
+.form-error {
+  margin-bottom: var(--spacing-md);
+}
+
+/* ── Links and buttons ───────────────────────────────────────────────── */
+
+/* Looks like a link, but is a button: anchors with target="_blank" are blocked
+   in sandboxes without allow-popups, so opening the policy goes through the
+   host's ui/open-link instead. */
+.inline-link {
+  padding: 0;
+  font: inherit;
+  color: var(--color-ring-primary);
+  background: none;
+  border: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.policy-url,
+.fallback-url {
+  margin: var(--spacing-sm) 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  overflow-wrap: anywhere;
+  opacity: 0.8;
+}
+
+.submit {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font: inherit;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-inverse);
+  background: var(--color-text-primary);
+  border: 0;
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+}
+
+.submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* ── Confirmation ────────────────────────────────────────────────────── */
+
 .confirmation {
-  padding: var(--spacing-md);
+  padding: var(--spacing-lg);
   border-radius: var(--border-radius-md);
   background: light-dark(#ecfdf5, #064e3b);
-  color: light-dark(#065f46, #a7f3d0);
-  font-weight: var(--font-weight-bold);
+  color: var(--color-success);
   text-align: center;
+}
+
+.confirmation h3 {
+  margin: 0 0 var(--spacing-sm);
+}
+
+.confirmation h3:focus-visible {
+  outline: none;
+}
+
+.confirmation p {
+  margin: 0;
 }

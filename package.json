@@ -1,11 +1,13 @@
 {
   "name": "webweaver-mcp-server",
-  "version": "1.0.2",
+  "version": "2.0.0",
   "type": "module",
-  "description": "MCP server for WebWeaver Nexus — waitlist form, product overview, and contact info",
+  "description": "MCP server for WebWeaver Nexus — contact form, product overview, and contact info",
   "main": "dist/main.js",
   "scripts": {
-    "build": "cross-env INPUT=mcp-app.html vite build && tsc --noEmit && tsc --noEmit -p tsconfig.server.json && tsc -p tsconfig.server.json",
+    "build": "cross-env INPUT=mcp-app.html vite build && tsc --noEmit && tsc --noEmit -p tsconfig.scripts.json && tsc --noEmit -p tsconfig.server.json && tsc -p tsconfig.server.json",
+    "check:contract": "tsx scripts/contract.ts check",
+    "sync:contract": "tsx scripts/contract.ts sync",
     "watch": "cross-env INPUT=mcp-app.html vite build --watch",
     "serve": "tsx main.ts",
     "serve:stdio": "tsx main.ts --stdio",

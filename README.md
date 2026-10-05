@@ -1,6 +1,6 @@
 # WebWeaver Nexus MCP Server
 
-An MCP server that exposes WebWeaver Nexus services — waitlist signup (with an embedded form UI), product overview, and contact info — to MCP-enabled hosts (Claude Desktop, claude.ai, ChatGPT, Cursor, MCP Inspector, basic-host).
+An MCP server that exposes WebWeaver Nexus services — a contact form (rendered as an interactive MCP App), product overview, and contact info — to MCP-enabled hosts (Claude Desktop, claude.ai, ChatGPT, Cursor, MCP Inspector, basic-host).
 
 **Production URL:** `https://webweaver-nexus-mcp.vercel.app/mcp` — Streamable HTTP, public, no authentication.
 
@@ -12,9 +12,12 @@ Published to the official MCP registry as `io.github.webweaver-nexus/webweaver-m
 
 | Tool | Type | Description |
 |------|------|-------------|
-| `join_waitlist` | MCP App (UI) | Embeds the Tally waitlist form inside the host |
+| `get_contact_form` | MCP App (UI) | Renders the WebWeaver Nexus contact form natively inside the host |
 | `get_product_overview` | Plain tool | Returns a description of what WebWeaver Nexus does |
 | `get_contact_info` | Plain tool | Returns contact methods and links |
+| `submit_contact_form` | App-only | Submits the form. Marked `_meta.ui.visibility: ["app"]`, so compliant hosts hide it from the model |
+
+The form is rendered in the App's own document and makes **no external requests**. It submits through the MCP bridge (`app.callServerTool`) to `submit_contact_form`, which POSTs server-to-server to the landing page's `/api/contact` with a bearer secret. That shape is why it works where the previous Tally iframe did not — see [Known Limitations](#known-limitations).
 
 ## Prerequisites
 
@@ -61,15 +64,37 @@ The server listens at `http://localhost:3001/mcp` by default.
 
 ## Configuration
 
-Before deploying, update the Tally form ID:
+### Environment variables
 
-1. Open `src/mcp-app.ts`
-2. Replace the form ID constant with your real Tally form ID
-3. Also update the `data-tally-src` URL in `mcp-app.html` to match
+Two, both for the contact API, both read **only** in `server.ts`. Copy `.env.example` to `.env` for local development.
 
-Tally's `embed.js` does **not** populate embeds by itself — `src/mcp-app.ts` has to call `window.Tally.loadEmbeds()` once the script loads, or the iframe keeps its `data-tally-src`, never gets a `src`, and the form silently renders as blank space.
+| Variable | Purpose |
+|---|---|
+| `CONTACT_FORM_SHARED_SECRET` | Bearer token for the landing page's `/api/contact`. Must match that project's value. |
+| `CONTACT_API_BASE_URL` | Where submissions go. Defaults to `https://webweaver-nexus.vercel.app`; a trailing slash is stripped. |
 
-Two settings keep the form readable in dark hosts and should be changed together: `transparentBackground=0` in the `data-tally-src` URL, and `color-scheme: light` on `#tally-container` in `src/mcp-app.css`. Tally's form styling does not follow the host theme, so with a transparent background its labels and inputs end up dark-on-dark. This mirrors the fix applied to the landing page embed.
+**The secret must never reach the client bundle.** `src/mcp-app.ts` is compiled into a single ~450 KB HTML string served to every user. After any build:
+
+```bash
+grep -c 'CONTACT_FORM_SHARED_SECRET' generated/mcp-app-html.ts   # must print 0
+```
+
+Going through `callServerTool` rather than fetching the API from the App is precisely what keeps the credential server-side.
+
+**Point `CONTACT_API_BASE_URL` at a local landing page while developing.** Against production, every test submission writes a real row to the production Supabase table and sends two real emails. Vercel *preview* deployments of this server do point at production — use them sparingly and clean up the rows afterwards (they carry `source='mcp'`).
+
+`npm run serve` loads `.env` from the working directory. The stdio entry point runs with `cwd=/` and cannot find it, so a stdio host config needs its own `env` block — see [Claude Desktop](#claude-desktop).
+
+### The form contract
+
+The landing page owns the form contract and publishes it at `GET /api/contact/schema`. This repo holds a generated, committed copy in `src/contact-contract.ts`:
+
+```bash
+npm run sync:contract    # regenerate from the endpoint
+npm run check:contract   # fail if the copy has drifted
+```
+
+Never hand-edit that file. The 8 goal option strings are also the keys of `GOAL_PARAGRAPHS` in the landing page's welcome email, so a single byte of drift silently drops the personalised paragraph with no error anywhere. The copy is committed rather than fetched at build time so that `npm run build` works offline and on a fresh clone; `check:contract` is a release step, not a build step.
 
 ## Testing with MCP Inspector (default harness)
 
@@ -87,9 +112,9 @@ The web UI opens on port `6274`. Set:
 
 Click **Connect**, then verify across tabs:
 
-1. **Tools** — all 3 tools appear (`join_waitlist`, `get_product_overview`, `get_contact_info`); the two plain tools return their text when called.
-2. **Resources** — `ui://join-waitlist/mcp-app.html` lists; reading it returns ~435 KB of bundled HTML.
-3. **Apps** — select `join_waitlist`; the Tally form renders inside its sandboxed iframe. Inspector builds a real CSP from our `_meta.ui.csp`, so this genuinely exercises `resourceDomains` / `frameDomains` / `connectDomains`. The form **renders** here but is **not fully interactive** — see [Inspector strips `allow-same-origin`](#mcp-inspector-strips-allow-same-origin) below.
+1. **Tools** — `get_contact_form`, `get_product_overview`, `get_contact_info` and `submit_contact_form` all appear. The last is marked app-only; Inspector lists it because **filtering by `visibility` is the host's job, not the server's**. The two plain tools return their text when called.
+2. **Resources** — `ui://get-contact-form/mcp-app.html` lists; reading it returns ~450 KB of bundled HTML and carries `_meta.ui.prefersBorder` with **no `csp` key at all**.
+3. **Apps** — select `get_contact_form`. The form renders with live, interactive controls and the network panel stays empty. Inspector strips `allow-same-origin`, so working controls here also prove the old Tally breakage was Tally's own storage access rather than a structural sandbox limit.
 
 There is also a CLI, which makes post-deploy checks scriptable without a browser:
 
@@ -100,14 +125,14 @@ npx @modelcontextprotocol/inspector --cli --transport http \
 # App metadata for a UI tool
 npx @modelcontextprotocol/inspector --cli --transport http \
   --server-url https://webweaver-nexus-mcp.vercel.app/mcp \
-  --method tools/call --tool-name join_waitlist --app-info
+  --method tools/call --tool-name get_contact_form --app-info
 ```
 
 **The one thing Inspector cannot do:** accept `ui/update-model-context`. As of v2.5.0 it never registers an `onupdatemodelcontext` handler and never declares the capability, so `app.updateModelContext()` has nowhere to land. Use basic-host for that one check.
 
 ## Testing with basic-host (model context updates)
 
-A vendored copy of the MCP Apps `basic-host` harness lives in [`tools/basic-host/`](tools/basic-host/). It is the only local host that declares the `updateModelContext` capability and renders a 📋 **Model Context** panel, which is how you confirm the waitlist form actually notifies the host model after submission.
+A vendored copy of the MCP Apps `basic-host` harness lives in [`tools/basic-host/`](tools/basic-host/). It is the only local host that declares the `updateModelContext` capability and renders a 📋 **Model Context** panel, which is how you confirm the form actually notifies the host model after submission.
 
 ```bash
 # once
@@ -129,7 +154,7 @@ cd tools/basic-host && SERVERS='["https://webweaver-nexus-mcp.vercel.app/mcp"]' 
 
 `SERVERS` is a **JSON array**, and ports 8080/8081 are effectively fixed — see [`tools/basic-host/README.md`](tools/basic-host/README.md) for provenance and the full set of caveats.
 
-> The Model Context panel stays hidden until the first update arrives, which for `join_waitlist` means a **real Tally submission** — it creates a live waitlist entry and fires notification emails. Use a throwaway entry.
+> The Model Context panel stays hidden until the first update arrives, which for `get_contact_form` means a **real submission** — it writes a row and fires notification emails. Point `CONTACT_API_BASE_URL` at a local landing page and use throwaway details.
 
 ## When to use which
 
@@ -137,10 +162,24 @@ cd tools/basic-host && SERVERS='["https://webweaver-nexus-mcp.vercel.app/mcp"]' 
 |------|-----|
 | "Is the server reachable? Do tools list?" | Inspector (`--cli` for scripts) |
 | "Do the plain tools return the right text?" | Inspector |
-| "Does the Tally form render inside the CSP sandbox?" | Inspector (renders, but not fully interactive) |
-| "Can a user actually complete and submit the form?" | basic-host or the deployed site |
+| "Does the form render and are its controls live?" | Inspector |
+| "Can a user actually complete and submit the form?" | basic-host, or Claude Desktop — both declare `serverTools` |
 | "Does `app.updateModelContext()` reach the host?" | basic-host — Inspector cannot |
+| "Does it work in the host customers actually use?" | Claude Desktop, via the local stdio config |
 | Fastest post-deploy sanity check | Inspector `--cli` |
+
+### Host support, as verified
+
+Re-check per release; these are observations, not guarantees.
+
+| Host | Form renders | Controls live | `serverTools` (submit) | Honours `visibility: ["app"]` |
+|---|---|---|---|---|
+| Claude Desktop | ✅ | ✅ | ✅ | ✅ |
+| `tools/basic-host` | ✅ | ✅ | ✅ | n/a (shows all tools) |
+| MCP Inspector | ✅ | ✅ | ✅ | ❌ lists it |
+| claude.ai connector | untested since v2.0.0 | — | — | — |
+
+Claude Desktop and Inspector rows verified 5 October 2026. Inspector additionally cannot receive `ui/update-model-context`.
 
 ## Exposing local dev to claude.ai (Cloudflare tunnel)
 
@@ -158,7 +197,7 @@ Copy the `https://*.trycloudflare.com` URL from the tunnel output. In Claude's s
 
 `*.trycloudflare.com` is allowlisted by the Host header check in `api/mcp.ts` — cloudflared forwards the public hostname rather than `localhost`, so without that entry every tunnelled request is rejected with `403 Invalid Host`.
 
-> **Note:** As of writing, claude.ai's custom connectors ignore `frameDomains` declared in `_meta.ui.csp` (see [GitHub issue `anthropics/claude-ai-mcp#40`](https://github.com/anthropics/claude-ai-mcp/issues/40)). This will cause the Tally embed in `join_waitlist` to be blocked. The two read-only tools work correctly. Track that issue for the fix.
+> **Note:** `get_contact_form` declares no CSP at all, so the `frameDomains` bug that blocked the previous Tally embed no longer applies. What to watch for instead is whether the host declares the `serverTools` capability — without it the App shows its "continue on the web" fallback rather than a submit button. See [Known Limitations](#known-limitations).
 
 ## Deployment (Vercel)
 
@@ -187,11 +226,11 @@ curl -X POST https://webweaver-nexus-mcp.vercel.app/mcp \
 curl -X POST https://webweaver-nexus-mcp.vercel.app/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","method":"resources/read","params":{"uri":"ui://join-waitlist/mcp-app.html"},"id":1}' \
+  -d '{"jsonrpc":"2.0","method":"resources/read","params":{"uri":"ui://get-contact-form/mcp-app.html"},"id":1}' \
   | wc -c
 ```
 
-For an interactive equivalent, run MCP Inspector against the deployed URL (see [Testing with MCP Inspector](#testing-with-mcp-inspector-quick-smoke-test) above). Recommended as the first post-deploy check before bringing up basic-host.
+For an interactive equivalent, run MCP Inspector against the deployed URL (see [Testing with MCP Inspector](#testing-with-mcp-inspector-default-harness) above). Recommended as the first post-deploy check before bringing up basic-host.
 
 ## Publishing to the MCP registry
 
@@ -216,7 +255,7 @@ All clients connect to the same endpoint:
 https://webweaver-nexus-mcp.vercel.app/mcp
 ```
 
-Transport is **Streamable HTTP**. No authentication; all three tools are publicly callable.
+Transport is **Streamable HTTP**. No authentication; every registered tool is publicly callable, including `submit_contact_form` — see [`visibility` is a hint, not an access control](#visibility-app-is-a-hint-not-an-access-control).
 
 Hosts that speak Streamable HTTP natively (claude.ai, ChatGPT, MCP Inspector, basic-host) take the URL directly. stdio-only hosts (Claude Desktop, Cursor today) use the `mcp-remote` npm shim — a small package that launches as a local stdio process and proxies JSON-RPC to the remote URL.
 
@@ -235,9 +274,26 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) o
 }
 ```
 
-Restart Claude Desktop; the three tools appear in the tools menu.
+Restart Claude Desktop; the three model-facing tools appear in the tools menu. `submit_contact_form` does **not** — Claude Desktop honours `visibility: ["app"]`.
 
-> The two read-only tools work. `join_waitlist` renders its App shell — heading, subtitle, host theme — but the embedded Tally form does not load, because Claude Desktop ignores `frameDomains`; see [Hosts that ignore `frameDomains`](#hosts-that-ignore-framedomains). Note this config proxies to the deployed server over HTTP via `mcp-remote`, so it never exercised the stdio `cwd` bug fixed in v1.0.1 — that bug only applied to a config launching this server as a local stdio process.
+To run this server as a **local stdio process** instead — which is how you test an unreleased change — point the config at the built entry point and carry the environment with it, because a stdio host launches the process with `cwd=/` and `.env` is never found:
+
+```json
+{
+  "mcpServers": {
+    "webweaver-nexus-local": {
+      "command": "node",
+      "args": ["/absolute/path/to/webweaver-mcp-server/dist/main.js", "--stdio"],
+      "env": {
+        "CONTACT_API_BASE_URL": "http://localhost:3000",
+        "CONTACT_FORM_SHARED_SECRET": "local-dev-secret"
+      }
+    }
+  }
+}
+```
+
+> The `mcp-remote` config above proxies to the deployed server over HTTP, so it never exercised the stdio `cwd` bug fixed in v1.0.1 — that bug only applied to a local stdio config like this one.
 
 ### claude.ai (Custom Connector)
 
@@ -247,7 +303,7 @@ claude.ai speaks Streamable HTTP natively — no shim.
 2. **Add custom connector** → paste `https://webweaver-nexus-mcp.vercel.app/mcp`.
 3. Save.
 
-The two read-only tools work. `join_waitlist`'s Tally form is blocked by an upstream `frameDomains` bug — see [Known Limitations](#known-limitations).
+All three model-facing tools work. Whether `get_contact_form` can submit depends on claude.ai declaring the `serverTools` capability — see [Known Limitations](#known-limitations).
 
 ### Cursor
 
@@ -280,33 +336,33 @@ Ask the host something like:
 
 > Use the WebWeaver Nexus connector to get the product overview.
 
-If the tool fires and returns text, the wire is good. For `join_waitlist`, the embedded Tally form renders directly in the conversation on hosts that have shipped MCP Apps rendering (Inspector Apps tab, basic-host) — see the per-client caveats above for the others.
+If the tool fires and returns text, the wire is good. For `get_contact_form`, the form renders directly in the conversation on hosts that have shipped MCP Apps rendering — see the per-client caveats above.
 
 ## Known Limitations
 
 ### ~~Claude Desktop stdio integration~~ — fixed in v1.0.1
 
-**Previously:** `join_waitlist` failed under Claude Desktop with `ENOENT: no such file or directory, open '/dist/mcp-app.html'`. Claude Desktop launches MCP server processes with the working directory set to `/` on macOS, and `server.ts` located the bundled HTML via `path.join(process.cwd(), "dist", "mcp-app.html")`. The `cwd` field in `claude_desktop_config.json` was tried as a workaround but is silently ignored on the version tested.
+**Previously:** `join_waitlist` (now `get_contact_form`) failed under Claude Desktop with `ENOENT: no such file or directory, open '/dist/mcp-app.html'`. Claude Desktop launches MCP server processes with the working directory set to `/` on macOS, and `server.ts` located the bundled HTML via `path.join(process.cwd(), "dist", "mcp-app.html")`. The `cwd` field in `claude_desktop_config.json` was tried as a workaround but is silently ignored on the version tested.
 
 **Fix:** the Vite build now writes the bundled HTML into `generated/mcp-app-html.ts`, which `server.ts` imports as a string constant. Nothing resolves a filesystem path at runtime, so the App resource behaves identically under stdio, local HTTP, and Vercel. Verified by running the server from `/` and reading the resource over stdio.
 
 Two earlier attempts are preserved in the history for context: a path probe (added in `e73484f`, reverted in `32dc1aa`) that resolved to an unbundled source file on Vercel, and a Vite 8 → 7 downgrade (`2e33c8e`, reverted in `c8ad36d`) that chased the wrong cause. The build now fails loudly if the unbundled source HTML is ever inlined by mistake.
 
-### MCP Inspector strips `allow-same-origin`
+### MCP Inspector strips `allow-same-origin` — no longer breaks the form
 
-In Inspector's **Apps** tab the Tally form renders and text inputs work, but the dropdown has no default and will not open, and the checkboxes cannot be ticked. The form cannot be completed there.
+Inspector's sandbox proxy says so in its own source: the App iframe is sandboxed *without* `allow-same-origin`, which is "always stripped from a server-supplied value". The App therefore runs on an opaque (`null`) origin.
 
-**Cause — host-side, not ours.** Inspector's sandbox proxy states it in its own source: the app iframe is sandboxed *without* `allow-same-origin`, so the app runs under an opaque (`null`) origin, and `allow-same-origin` is "always stripped from a server-supplied value". Sandbox flags are inherited by nested iframes, so Tally's own iframe inherits the opaque origin, its client-side JS cannot reach same-origin storage, and its interactive controls fail. Native text inputs need no JS, which is why they still work.
+This used to kill the form. The old Tally iframe inherited the opaque origin (sandbox flags are inherited by nested frames), its JS could not reach same-origin storage, and its dropdown and checkboxes went dead while plain text inputs kept working. Confirmed at the time by an A/B test on the flag alone.
 
-Confirmed by an A/B test: two iframes loading the same Tally embed URL, differing only in `allow-same-origin`. With the flag, the dropdown carries its default and the controls work; without it, the dropdown shows "Please Select an Option" and the controls are dead — matching Inspector exactly. The same embed works in `tools/basic-host` (`allow-scripts allow-same-origin allow-forms`) and on the landing page (no sandbox).
+**The native form is unaffected**, because native controls need no storage. One constraint survives and must be respected: under an opaque origin `localStorage`, `sessionStorage` and `document.cookie` all throw `SecurityError`, which is why `RENDERED_AT` in `src/mcp-app.ts` is a module-scope constant and must stay one.
 
-**Do not "fix" this with `_meta.ui.domain`.** Inspector does grant `allow-same-origin` to apps declaring that field, but the spec is explicit that its format is *host-dependent* (`{hash}.claudemcpcontent.com`, `www-example-com.oaiusercontent.com`). The value is assigned by each host, so guessing one satisfies Inspector at the risk of breaking others.
+**Do not "fix" the sandbox with `_meta.ui.domain`.** Inspector does grant `allow-same-origin` to Apps declaring that field, but the spec is explicit that its format is *host-dependent* (`{hash}.claudemcpcontent.com`, `www-example-com.oaiusercontent.com`). The value is assigned by each host, so guessing one satisfies Inspector at the risk of breaking others. Nothing here needs it.
 
-Use Inspector to confirm the App renders and the CSP is honoured. Use `tools/basic-host` or the live site to exercise the form itself.
+### ~~Hosts that ignore `frameDomains`~~ — resolved in v2.0.0 by removing the dependency
 
-### Hosts that ignore `frameDomains`
+**Affected claude.ai custom connectors and Claude Desktop.** Both rendered the App shell correctly but left the embedded Tally form as blank space: the host ignores `frameDomains` declared in `_meta.ui.csp`, so the nested `tally.so` iframe was blocked. Upstream issue [`anthropics/claude-ai-mcp#40`](https://github.com/anthropics/claude-ai-mcp/issues/40), still open.
 
-**Affects claude.ai custom connectors and Claude Desktop.** Both render the `join_waitlist` App shell correctly but leave the Tally form as blank space: the host ignores the `frameDomains` we declare in `_meta.ui.csp`, so the nested `tally.so` iframe is blocked. Upstream issue [`anthropics/claude-ai-mcp#40`](https://github.com/anthropics/claude-ai-mcp/issues/40). The two read-only tools are unaffected.
+**Why it no longer applies.** The form is now rendered natively in the App's own document and declares no `csp` at all. A policy we do not depend on cannot be ignored. Kept here because it constrains future work: **never put a third-party iframe in an MCP App** — iframing a form of our own would hit the identical bug, since the nested-frame shape is the problem rather than Tally specifically.
 
 Claude Desktop is the same stack — its `initialize` sends `clientInfo.name: "claude-ai (via mcp-remote …)"` — so it inherits the same bug. It does advertise MCP Apps support (`extensions["io.modelcontextprotocol/ui"]` with `text/html;profile=mcp-app`), and the MCP log shows `resources/read` and `tools/call` both returning normally, which is why this presents as a rendering failure rather than a protocol one.
 
@@ -323,11 +379,31 @@ Only `frameDomains` is dropped — the other two declarations survive. The App f
 mcp_apps?connect-src=https%3A%2F%2Ftally.so&resource-src=https%3A%2F%2Ftally.so+https%3A%2F%2Fassets.claude.ai
 ```
 
-There is no `frame-src` parameter, so the policy falls back to `frame-src 'self' blob: data:`. Tally's loader does run (`iframe-resizer v5.5.9` appears in the console) and the app requests the correct embed URL — the host blocks the frame, nothing upstream of it. Identical on both transports, `mcp-remote` over HTTP and a local stdio config, as expected for a renderer-side block.
+There was no `frame-src` parameter, so the policy fell back to `frame-src 'self' blob: data:`. Tally's loader did run and the App requested the correct embed URL — the host blocked the frame, nothing upstream of it. Identical on both transports, `mcp-remote` over HTTP and a local stdio config, as expected for a renderer-side block.
 
-Don't attempt to work around it server-side — there is nothing to fix in this repo.
+**Confirmed fixed in Claude Desktop, 5 October 2026.** The same App frame URL now reads:
 
-**The wider pattern.** Every host that has been tried degrades the third-party embed somehow: Inspector strips `allow-same-origin` so Tally's controls die, and these two block the frame outright. Only `tools/basic-host` and the landing page render it fully. If `join_waitlist` needs to work in Anthropic's own clients, the durable answer is a native form in the App posting to Tally's API — `connectDomains` already permits `tally.so` — rather than embedding Tally's iframe.
+```
+mcp_apps?stable-origin=true&resource-src=https%3A%2F%2Fassets.claude.ai&dev=true
+```
+
+`tally.so` is gone from `resource-src` and there is no `connect-src` parameter at all, because the App asks for neither. The DevTools console showed **no CSP violations** across the whole session — the only policy line was Claude Desktop's own `Unrecognized Content-Security-Policy directive 'webrtc'`. The form rendered with live controls and a submission reached Supabase with `source='mcp'`.
+
+Note the new `stable-origin=true` parameter: Claude Desktop now assigns App frames a stable origin, which is the mechanism behind `_meta.ui.domain`. If that comes with `allow-same-origin`, browser storage may eventually be usable in Apps on this host. Don't rely on it — MCP Inspector still strips the flag, so the opaque-origin rules below still bind.
+
+### Hosts without the `serverTools` capability
+
+`app.callServerTool()` requires the host to declare `serverTools`; without it the App cannot submit. **Claude Desktop declares it** — verified 5 October 2026, a submission went through end to end. So does `tools/basic-host`. It remains unverified on claude.ai and other hosts, and a host may withdraw it, so the guard stays.
+
+`src/mcp-app.ts` probes the capability **on load, not on submit**, and when it is absent replaces the form with a "continue on the web" affordance that opens `/#contact` via `app.openLink()` (itself gated on `openLinks`; without that too, the URL is shown as selectable text). The ordering is deliberate: a form whose submit button silently does nothing is worse than no form, because it looks like it worked.
+
+Because the capability is present on the hosts tested, **the fallback is insurance that has not been exercised in a real host.** It has only been confirmed by stubbing the capability locally. Re-check it if you touch that path.
+
+### `visibility: ["app"]` is a hint, not an access control
+
+`submit_contact_form` declares `_meta.ui.visibility: ["app"]`, and **Claude Desktop honours it**: asked to list its tools, the model named only `get_contact_form`, `get_contact_info` and `get_product_overview`, having just called the submit tool from inside the App (verified 5 October 2026).
+
+That is host courtesy, not enforcement. **`tools/list` returns the tool to every client** — the server does no filtering, and the spec puts it on the host. A host that ignores the flag exposes the tool to its model. That is tolerable rather than dangerous: `consentPrivacy` must be literal `true`, and the landing page records every submission on this path as `source='mcp'`, so anything synthesised is identifiable. Don't treat the flag as a security boundary.
 
 
 ## Project Structure
@@ -338,9 +414,13 @@ Don't attempt to work around it server-side — there is nothing to fix in this 
 ├── server.ts            # Tool & resource registration (shared)
 ├── mcp-app.html         # App UI template (Vite entry, source)
 ├── src/
-│   ├── mcp-app.ts       # Client-side App lifecycle + Tally integration
+│   ├── mcp-app.ts       # Client-side App lifecycle + native contact form
+│   ├── contact-contract.ts # GENERATED — form contract vendored from the landing page
+│   ├── submit-outcome.ts   # Result type shared by server.ts and the App
 │   ├── mcp-app.css      # App-specific styles
 │   └── global.css       # Host variable fallbacks & reset
+├── scripts/
+│   └── contract.ts      # sync / check the vendored contract
 ├── tools/
 │   └── basic-host/      # Vendored MCP host harness (model context updates)
 ├── generated/           # Build artifact — bundled HTML as a TS constant (git-ignored)
@@ -348,11 +428,14 @@ Don't attempt to work around it server-side — there is nothing to fix in this 
 ├── vite.config.ts       # Vite + singlefile plugin config
 ├── tsconfig.json        # Client + shared type-checking
 ├── tsconfig.server.json # Server declaration emit
+├── tsconfig.scripts.json # Type-checks scripts/ (noEmit)
+├── .env.example         # CONTACT_API_BASE_URL, CONTACT_FORM_SHARED_SECRET
 ├── vercel.json          # Vercel deployment config
 └── package.json
 
 ## Version History
 
+- **v2.0.0** — **Breaking:** `join_waitlist` is renamed `get_contact_form` and its resource URI is now `ui://get-contact-form/mcp-app.html`; there is no alias, so a cached client errors until it re-lists. The Tally iframe is replaced by a form rendered natively in the App, which makes zero external requests and therefore declares no `_meta.ui.csp` — the structural fix for hosts that ignore `frameDomains`. Submission goes through a new app-only `submit_contact_form` tool (`_meta.ui.visibility: ["app"]`) which POSTs server-to-server to the landing page's `/api/contact`, so the shared secret never enters the client bundle. Adds the repo's first two env vars and a vendored form contract with `npm run check:contract`. Also removes a `postMessage` listener that had no origin check and trusted any frame claiming to be a Tally submission.
 - **v1.0.2** — Fixed `join_waitlist` rendering an empty panel in every host: the app loaded Tally's `embed.js` but never called `Tally.loadEmbeds()`, so the form iframe was never given a `src`. Also guards `updateModelContext` behind the host capability, and vendors the basic-host harness into `tools/basic-host/` so the `ext-apps` clone is no longer needed.
 - **v1.0.1** — `join_waitlist` now works over stdio (Claude Desktop). The App HTML is compiled into the server instead of read from disk, removing the `process.cwd()` dependency. Rate limiting is now per-client: `trust proxy` was unset, so every caller shared a single 60/min bucket behind Vercel's proxy. Host validation now accepts Vercel preview deployments and `*.trycloudflare.com`, which the documented tunnel workflow needs. Dependencies updated to clear all `npm audit` advisories (MCP SDK 1.29 → 1.30).
 - **v1.0.0** — Published to the official MCP registry as `io.github.webweaver-nexus/webweaver-mcp-server`. Endpoint hardened with a CORS allowlist and rate limiting.

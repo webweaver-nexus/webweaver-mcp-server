@@ -5,6 +5,13 @@
   --color-text-inverse: light-dark(#f3f4f6, #1f2937);
   --color-background-primary: light-dark(#ffffff, #1a1a1a);
   --color-ring-primary: light-dark(#3b82f6, #60a5fa);
+
+  /* Form surfaces. Hosts that send style variables override these via
+     applyHostStyleVariables; these are the fallbacks when they don't. */
+  --color-border: light-dark(#d1d5db, #4b5563);
+  --color-error: light-dark(#b91c1c, #fca5a5);
+  --color-success: light-dark(#065f46, #a7f3d0);
+
   --border-radius-md: 6px;
   --border-width-regular: 1px;
   --font-sans: ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
