@@ -163,9 +163,23 @@ cd tools/basic-host && SERVERS='["https://webweaver-nexus-mcp.vercel.app/mcp"]' 
 | "Is the server reachable? Do tools list?" | Inspector (`--cli` for scripts) |
 | "Do the plain tools return the right text?" | Inspector |
 | "Does the form render and are its controls live?" | Inspector |
-| "Can a user actually complete and submit the form?" | basic-host (it declares `serverTools`) |
+| "Can a user actually complete and submit the form?" | basic-host, or Claude Desktop — both declare `serverTools` |
 | "Does `app.updateModelContext()` reach the host?" | basic-host — Inspector cannot |
+| "Does it work in the host customers actually use?" | Claude Desktop, via the local stdio config |
 | Fastest post-deploy sanity check | Inspector `--cli` |
+
+### Host support, as verified
+
+Re-check per release; these are observations, not guarantees.
+
+| Host | Form renders | Controls live | `serverTools` (submit) | Honours `visibility: ["app"]` |
+|---|---|---|---|---|
+| Claude Desktop | ✅ | ✅ | ✅ | ✅ |
+| `tools/basic-host` | ✅ | ✅ | ✅ | n/a (shows all tools) |
+| MCP Inspector | ✅ | ✅ | ✅ | ❌ lists it |
+| claude.ai connector | untested since v2.0.0 | — | — | — |
+
+Claude Desktop and Inspector rows verified 5 October 2026. Inspector additionally cannot receive `ui/update-model-context`.
 
 ## Exposing local dev to claude.ai (Cloudflare tunnel)
 
@@ -260,7 +274,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) o
 }
 ```
 
-Restart Claude Desktop; the three model-facing tools appear in the tools menu.
+Restart Claude Desktop; the three model-facing tools appear in the tools menu. `submit_contact_form` does **not** — Claude Desktop honours `visibility: ["app"]`.
 
 To run this server as a **local stdio process** instead — which is how you test an unreleased change — point the config at the built entry point and carry the environment with it, because a stdio host launches the process with `cwd=/` and `.env` is never found:
 
@@ -367,15 +381,29 @@ mcp_apps?connect-src=https%3A%2F%2Ftally.so&resource-src=https%3A%2F%2Ftally.so+
 
 There was no `frame-src` parameter, so the policy fell back to `frame-src 'self' blob: data:`. Tally's loader did run and the App requested the correct embed URL — the host blocked the frame, nothing upstream of it. Identical on both transports, `mcp-remote` over HTTP and a local stdio config, as expected for a renderer-side block.
 
+**Confirmed fixed in Claude Desktop, 5 October 2026.** The same App frame URL now reads:
+
+```
+mcp_apps?stable-origin=true&resource-src=https%3A%2F%2Fassets.claude.ai&dev=true
+```
+
+`tally.so` is gone from `resource-src` and there is no `connect-src` parameter at all, because the App asks for neither. The DevTools console showed **no CSP violations** across the whole session — the only policy line was Claude Desktop's own `Unrecognized Content-Security-Policy directive 'webrtc'`. The form rendered with live controls and a submission reached Supabase with `source='mcp'`.
+
+Note the new `stable-origin=true` parameter: Claude Desktop now assigns App frames a stable origin, which is the mechanism behind `_meta.ui.domain`. If that comes with `allow-same-origin`, browser storage may eventually be usable in Apps on this host. Don't rely on it — MCP Inspector still strips the flag, so the opaque-origin rules below still bind.
+
 ### Hosts without the `serverTools` capability
 
-**This is the live limitation to watch.** `app.callServerTool()` requires the host to declare `serverTools`; without it the App cannot submit. `tools/basic-host` declares it, MCP Inspector does not expose model-context updates but does proxy tool calls — and whether Claude Desktop and claude.ai declare it needs confirming per release.
+`app.callServerTool()` requires the host to declare `serverTools`; without it the App cannot submit. **Claude Desktop declares it** — verified 5 October 2026, a submission went through end to end. So does `tools/basic-host`. It remains unverified on claude.ai and other hosts, and a host may withdraw it, so the guard stays.
 
 `src/mcp-app.ts` probes the capability **on load, not on submit**, and when it is absent replaces the form with a "continue on the web" affordance that opens `/#contact` via `app.openLink()` (itself gated on `openLinks`; without that too, the URL is shown as selectable text). The ordering is deliberate: a form whose submit button silently does nothing is worse than no form, because it looks like it worked.
 
+Because the capability is present on the hosts tested, **the fallback is insurance that has not been exercised in a real host.** It has only been confirmed by stubbing the capability locally. Re-check it if you touch that path.
+
 ### `visibility: ["app"]` is a hint, not an access control
 
-`submit_contact_form` declares `_meta.ui.visibility: ["app"]`, but **`tools/list` returns it to every client** — filtering is the host's responsibility. A host that ignores it exposes the tool to the model. That is tolerable rather than dangerous: `consentPrivacy` must be literal `true`, and the landing page records every submission arriving on this path as `source='mcp'`, so anything synthesised is identifiable. Don't treat the flag as a security boundary.
+`submit_contact_form` declares `_meta.ui.visibility: ["app"]`, and **Claude Desktop honours it**: asked to list its tools, the model named only `get_contact_form`, `get_contact_info` and `get_product_overview`, having just called the submit tool from inside the App (verified 5 October 2026).
+
+That is host courtesy, not enforcement. **`tools/list` returns the tool to every client** — the server does no filtering, and the spec puts it on the host. A host that ignores the flag exposes the tool to its model. That is tolerable rather than dangerous: `consentPrivacy` must be literal `true`, and the landing page records every submission on this path as `source='mcp'`, so anything synthesised is identifiable. Don't treat the flag as a security boundary.
 
 
 ## Project Structure
