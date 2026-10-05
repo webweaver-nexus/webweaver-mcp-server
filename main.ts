@@ -12,6 +12,16 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import app from "./api/mcp.js";
 import { createServer } from "./server.js";
 
+// Local development only: load .env from the working directory if one exists.
+// Vercel injects env vars directly, and stdio hosts launch this with cwd=/,
+// where there is nothing to find — Claude Desktop's config carries an `env`
+// block instead. See .env.example.
+try {
+  process.loadEnvFile();
+} catch {
+  // No .env, or not readable. Both are normal.
+}
+
 if (process.argv.includes("--stdio")) {
   await createServer().connect(new StdioServerTransport());
 } else {

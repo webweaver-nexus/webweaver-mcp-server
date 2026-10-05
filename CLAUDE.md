@@ -4,7 +4,9 @@ Guidance for Claude Code when working in this repo. For commands, deployment, ve
 
 ## Project Overview
 
-MCP server that exposes WebWeaver Nexus's services to **external** AI hosts (Claude Desktop, claude.ai custom connectors, ChatGPT, Gemini, etc.) — *not* consumed by our own landing page or by the Python support agent. Three tools: `join_waitlist` (MCP App with embedded Tally form UI), `get_product_overview`, `get_contact_info`. Production: `https://webweaver-nexus-mcp.vercel.app/mcp`.
+MCP server that exposes WebWeaver Nexus's services to **external** AI hosts (Claude Desktop, claude.ai custom connectors, ChatGPT, Gemini, etc.) — *not* consumed by our own landing page or by the Python support agent. Production: `https://webweaver-nexus-mcp.vercel.app/mcp`.
+
+Three model-facing tools — `get_contact_form` (MCP App with a natively rendered contact form), `get_product_overview`, `get_contact_info` — plus `submit_contact_form`, which carries `_meta.ui.visibility: ["app"]` so compliant hosts hide it from the model and let only our own App call it.
 
 For the WebWeaver Nexus product context (this repo's role within Tier 3), see `../CLAUDE.md` and `../README.md` at the parent folder.
 
@@ -27,15 +29,17 @@ When fixing a **tool** bug, edit `server.ts` — the change picks up in both ent
 
 ### Client App lifecycle
 
-`src/mcp-app.ts` instantiates `App` from `@modelcontextprotocol/ext-apps`, applies host context (theme, fonts, CSS variables, safe-area insets), loads the Tally embed script, and listens for `Tally.FormSubmitted` postMessages. On submission it calls `app.updateModelContext()` to notify the host model that the user signed up.
+`src/mcp-app.ts` instantiates `App` from `@modelcontextprotocol/ext-apps`, applies host context (theme, fonts, CSS variables, safe-area insets), renders the contact form from the vendored contract, and submits it with `app.callServerTool({ name: "submit_contact_form" })`. On success it calls `app.updateModelContext()` so the host's model knows the user made contact.
 
-The Tally form is loaded as a third-party iframe inside the MCP App iframe — that's why CSP needs all three of `resourceDomains` / `frameDomains` / `connectDomains` set to `https://tally.so`.
+**The App makes zero external requests, and that is load-bearing.** It needs no `_meta.ui.csp` at all, which is why the host CSP bug that killed the previous Tally embed cannot recur (see the sharp edges). Submitting through the bridge rather than `fetch` is equally deliberate: the shared secret stays server-side, and the App — a ~450 KB HTML string handed to every user — never holds a credential.
 
 ## Adding or editing tools
 
 **Plain tool (no UI)** — use `server.registerTool`. See `get_product_overview` / `get_contact_info` in `server.ts` for the pattern.
 
-**MCP App tool (with UI)** — pair `registerAppTool` + `registerAppResource` from `@modelcontextprotocol/ext-apps/server`. See `join_waitlist` in `server.ts`. Required pieces:
+**App-only tool** — a tool the App calls but the model should not see: register it with `server.registerTool` and `_meta: { ui: { visibility: ["app"] } }`. See `submit_contact_form`. **Filtering is the host's job, not ours** — `tools/list` returns it to every client, and a compliant host hides it from the model. Treat it as a strong hint, not an access control: anything behind it still needs to be safe if the model calls it directly.
+
+**MCP App tool (with UI)** — pair `registerAppTool` + `registerAppResource` from `@modelcontextprotocol/ext-apps/server`. See `get_contact_form` in `server.ts`. Required pieces:
 - `_meta.ui.resourceUri` on the tool — points to the resource URI.
 - `registerAppResource` returning the bundled HTML with `_meta.ui.csp` declaring any third-party domains the embed needs (`resourceDomains` for scripts, `frameDomains` for iframes, `connectDomains` for fetch/XHR).
 - The HTML/CSS/TS for the UI lives under `src/` + `mcp-app.html`. Vite picks up the `INPUT` env var (`mcp-app.html`) at build time.
@@ -44,12 +48,14 @@ If you add another MCP App tool that needs a different UI, you'll need a second 
 
 ## Configuration touchpoints
 
-These are the places hardcoded values live. There are no env vars; don't go hunting for a `.env.example`.
+Most configuration is in-source. **Two env vars are the exception** — see `.env.example`. This used to read "there are no env vars"; the contact API needs a credential and a target, and a credential cannot be in-source.
 
 | What | Where | Notes |
 |---|---|---|
-| Tally form ID | `src/mcp-app.ts` (`TALLY_FORM_ID` const) **and** `mcp-app.html` (`data-tally-src` URL) | **Must match in both files.** The TS const is checked against incoming `Tally.FormSubmitted` events; the HTML attribute is what Tally's loader reads. |
-| Tally embed theme | `mcp-app.html` (`transparentBackground=0`) **and** `src/mcp-app.css` (`color-scheme: light` on `#tally-container`) | Change together. Tally's form does not follow the host theme, so a transparent background leaves labels and inputs dark-on-dark in dark hosts. Same fix as the landing page embed. |
+| `CONTACT_FORM_SHARED_SECRET` | env, read **only** in `server.ts` | Bearer token for the landing page's `/api/contact`. Must match the value in that project. **Never import it into anything under `src/`** — that is bundled into the App and served to every user. A mismatch surfaces as a 401 that looks like a form bug; check the two projects agree first. |
+| `CONTACT_API_BASE_URL` | env, read **only** in `server.ts` | Defaults to `https://webweaver-nexus.vercel.app`. A trailing slash is stripped. Point it at `http://localhost:3000` for development — against production, every test submission writes a real row and sends two real emails. |
+| Contact form contract | `src/contact-contract.ts` (**generated**) | The 8 goal options, field copy, consent text. Regenerate with `npm run sync:contract`; verify with `npm run check:contract`. Never hand-edit: the option strings are also the keys of `GOAL_PARAGRAPHS` upstream, and a one-byte drift silently drops the welcome email's personalised paragraph. |
+| Privacy policy / web form URLs | `src/mcp-app.ts` (`SITE_URL`) | Always production, deliberately: these are links shown to a user, and a local dev server is not where to send someone to read a policy. Not secret, safe to bundle. |
 | Allowed Host headers | `api/mcp.ts` (`ALLOWED_HOSTS` array) | Strings match exactly, regexes match patterns (Vercel previews, `*.trycloudflare.com`). New deploy domains must be added here or requests 403. Anchor any regex you add — `.vercel.app` unanchored would match `evil-....vercel.app.attacker.com`. |
 | Server name/version | `server.ts` (`new McpServer({ name, version })`) | Reported to hosts on `initialize`. |
 | App name/version | `src/mcp-app.ts` (`new App({ name, version })`) | Reported during the App handshake with the host. |
@@ -61,22 +67,25 @@ These are the places hardcoded values live. There are no env vars; don't go hunt
 - **The App HTML is compiled in, not read from disk.** `server.ts` imports `MCP_APP_HTML` from `generated/mcp-app-html.ts`, which a `vite.config.ts` build plugin writes from `dist/mcp-app.html` on every build. Don't reintroduce a runtime `fs.readFile` or a path probe: the old `process.cwd()` lookup broke under stdio (`cwd=/`), and the probe that replaced it resolved to the *unbundled* source HTML on Vercel (tried and reverted around 28 April 2026). The plugin throws if the HTML it's about to inline still references `/src/mcp-app.ts`, which is the signature of that regression.
 - **`generated/` is git-ignored, so build order matters.** `npm run build` runs Vite *before* the server type-check for this reason; on a fresh clone `server.ts` won't type-check until you've built once. `npm run serve` loads the constant at startup, so UI edits need a server restart (the old `fs.readFile` picked them up per-request).
 - **The SDK's `allowedHosts` option is deliberately unused.** It only matches exact strings, so it cannot express Vercel preview domains or tunnel hostnames; `api/mcp.ts` supplies equivalent middleware instead. The SDK therefore logs a "binding to 0.0.0.0 without DNS rebinding protection" warning at startup — expected, not a regression.
-- **Tally's `embed.js` never populates embeds on its own.** It assigns `window.Tally` and handles popup config, nothing else — `src/mcp-app.ts` must call `window.Tally.loadEmbeds()` on script load. Without it the iframe keeps `data-tally-src`, is never given a `src`, and the form renders as blank space with no console error. This shipped broken until v1.0.2; if the form ever goes blank again, check this first.
+- **The App must never make an external request.** The form is rendered in this document and submits over the postMessage bridge, so `registerAppResource` declares **no `_meta.ui.csp`** at all. That is the fix for the host bug below, not a workaround for it: a policy we do not depend on cannot be ignored by a host. Adding any third-party script, iframe, font or `fetch` to `src/mcp-app.ts` would reintroduce a CSP dependency and, if it is a frame, the exact breakage this replaced.
 - **Inspector cannot receive `ui/update-model-context`.** As of v2.5.0 it registers no `onupdatemodelcontext` handler and does not declare the capability, so `app.updateModelContext()` would reject there. `src/mcp-app.ts` checks `getHostCapabilities()` before calling. Use `tools/basic-host` to verify that path.
-- **MCP Inspector strips `allow-same-origin` from the App sandbox** (v2.5.0), so the app runs in an opaque origin and nested iframes inherit it. The Tally embed therefore renders but is not interactive there: no dropdown default, dropdown will not open, checkboxes will not tick. Verified by A/B on the sandbox flag; works in `tools/basic-host` and on the landing page. `_meta.ui.domain` would win the grant back, but its format is host-assigned — don't guess one. This is a host constraint; there is nothing to fix server-side.
-- **claude.ai custom connectors *and Claude Desktop* ignore `frameDomains`** declared in `_meta.ui.csp` (upstream issue `anthropics/claude-ai-mcp#40`). Both render the App shell but leave the Tally embed blank. Captured in Claude Desktop's DevTools console: `Framing 'https://tally.so/' violates the following Content Security Policy directive: "frame-src 'self' blob: data:"`. Only `frameDomains` is lost — the App frame URL carries `connect-src=https://tally.so` and `resource-src=https://tally.so https://assets.claude.ai`, with no `frame-src` parameter at all. Tally's loader runs and requests the right URL; the host blocks the frame. Claude Desktop is the same stack — its `initialize` reports `clientInfo.name: "claude-ai (via mcp-remote …)"` — and it does advertise MCP Apps support, with `resources/read` and `tools/call` both succeeding on the wire. The two read-only tools work fine. Don't attempt to "fix" this from our side — it's a host bug.
-- **No host tried so far renders the Tally embed fully except `tools/basic-host` and the landing page.** Inspector strips `allow-same-origin`; claude.ai and Claude Desktop block the frame. The embed is the fragile part of `join_waitlist`. A native form posting to Tally's API (`connectDomains` already allows `tally.so`) would be immune to all three — worth considering before investing further in the iframe.
+- **MCP Inspector strips `allow-same-origin` from the App sandbox** (v2.5.0), so the App runs on an opaque origin. Under an opaque origin `localStorage`, `sessionStorage` and `document.cookie` all throw `SecurityError` — which is why `RENDERED_AT` is a module-scope constant in `src/mcp-app.ts` and must stay one. This is what killed the old Tally embed's controls (its own JS needed same-origin storage); native controls need no storage, so the form itself is unaffected.
+- **`claude.ai` and Claude Desktop ignore `frameDomains`** in `_meta.ui.csp` (upstream `anthropics/claude-ai-mcp#40`). This is the bug the native form exists to escape, kept here because it constrains any future UI work: **never put a third-party iframe in an MCP App.** Captured in Claude Desktop's DevTools: `Framing 'https://tally.so/' violates the following Content Security Policy directive: "frame-src 'self' blob: data:"`. Only `frameDomains` is lost — the App frame URL carried `connect-src` and `resource-src` fine, with no `frame-src` parameter at all. Nesting an iframe of *our own* form would hit the identical bug; the shape is the problem, not Tally.
+- **`app.callServerTool()` needs the host's `serverTools` capability, and not every host has it.** Without it the form cannot submit. `src/mcp-app.ts` probes on load — not on submit — and shows a "continue on the web" fallback instead of a form. Keep that ordering: a form whose submit button silently does nothing is worse than no form, because it looks like it worked.
+- **`visibility: ["app"]` is a host-side hint, not an access control.** `submit_contact_form` is returned by `tools/list` to every client; hosts are expected to hide it from the model. So it still has to be safe if a model calls it directly — hence `consentPrivacy: z.literal(true)`, and upstream recording every such submission as `source='mcp'`.
 - **`StreamableHTTPServerTransport` is constructed per-request** in `api/mcp.ts` with `sessionIdGenerator: undefined` (no session reuse). If you add stateful tools that need per-session memory, this is the place to revisit — currently every request is independent.
 
 ## Build / tsconfig topology
 
 - `tsconfig.json` — client + shared type-checking (the App UI in `src/`).
-- `tsconfig.server.json` — emits `.d.ts` and compiled JS for the server (`server.ts`, `main.ts`, `api/mcp.ts`).
+- `tsconfig.server.json` — emits `.d.ts` and compiled JS for the server (`server.ts`, `main.ts`, `api/mcp.ts`, plus `src/contact-contract.ts`, which the server imports for its `z.enum` of goal options).
+- `tsconfig.scripts.json` — type-checks `scripts/` only, `noEmit`. It needs an explicit `"types": ["node"]`; without it, automatic `@types` discovery does not apply through `extends` and every `node:` import fails to resolve.
 - `vite.config.ts` — bundles the App UI (input from the `INPUT` env var), and hosts the `webweaver:inline-app-html` plugin that emits `generated/mcp-app-html.ts`.
-- The full build (`npm run build`): Vite bundle (+ inline HTML into `generated/`) → typecheck client → typecheck server → emit server JS. Order matters: the server type-check depends on the generated module.
+- The full build (`npm run build`): Vite bundle (+ inline HTML into `generated/`) → typecheck client → typecheck scripts → typecheck server → emit server JS. Order matters: the server type-check depends on the generated module.
+- `npm run check:contract` is **not** part of the build, deliberately: the build must work offline and on a fresh clone. It is a release step.
 
 ## What's not here
 
-- **No tests.** Verification is via the README's `curl` checks, MCP Inspector (the default harness), and the vendored `tools/basic-host` harness for model-context updates.
-- **No env vars.** All config is in-source.
-- **No CI configured in this repo.** Vercel auto-deploys on push to `main`.
+- **No tests.** Verification is via the README's `curl` checks, `npm run check:contract`, MCP Inspector (the default harness), and the vendored `tools/basic-host` harness for model-context updates.
+- **Two env vars**, both for the contact API, both read only in `server.ts`. Everything else is in-source. See `.env.example` and the configuration touchpoints above. `npm run serve` loads `.env` from the working directory; the stdio entry point runs with `cwd=/` and cannot, so a stdio host config needs its own `env` block.
+- **No CI for build or test.** The only workflow is the manual-dispatch MCP registry publish (`.github/workflows/publish-mcp-registry.yml`). Vercel auto-deploys on push to `main`.

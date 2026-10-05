@@ -1,8 +1,9 @@
 # Dependencies (Vercel installs fresh)
 node_modules
 
-# Local MCP host harness (tools/basic-host) — never needed by the function
+# Local MCP host harness and dev scripts — never needed by the function
 tools
+scripts
 
 # Local environment
 .env
