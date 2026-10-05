@@ -23,7 +23,7 @@ For the WebWeaver Nexus product context (this repo's role within Tier 3), see `.
 
 - `server.ts` — **canonical tool/resource registration.** Exports `createServer()`. This is the only place tools are defined.
 - `main.ts` — local-dev entry. Supports `--stdio` or HTTP on `PORT` (default 3001). Imports `createServer()`.
-- `api/mcp.ts` — Vercel serverless entry. Exports the Express app as `default`. Imports `createServer()`. Owns the edge concerns — `trust proxy`, Host validation, CORS, rate limiting — and uses `StreamableHTTPServerTransport` per-request (no session reuse).
+- `api/mcp.ts` — Vercel serverless entry. Exports the Express app as `default`. Imports `createServer()`. Owns the edge concerns — `trust proxy`, Host validation, CORS, rate limiting — and mounts `createMcpHandler` via `toNodeHandler`.
 
 When fixing a **tool** bug, edit `server.ts` — the change picks up in both entry points. When fixing a **transport/CORS/routing** bug, identify which entry point it affects.
 
@@ -31,7 +31,7 @@ When fixing a **tool** bug, edit `server.ts` — the change picks up in both ent
 
 `src/mcp-app.ts` instantiates `App` from `@modelcontextprotocol/ext-apps`, applies host context (theme, fonts, CSS variables, safe-area insets), renders the contact form from the vendored contract, and submits it with `app.callServerTool({ name: "submit_contact_form" })`. On success it calls `app.updateModelContext()` so the host's model knows the user made contact.
 
-**The App makes zero external requests, and that is load-bearing.** It needs no `_meta.ui.csp` at all, which is why the host CSP bug that killed the previous Tally embed cannot recur (see the sharp edges). Submitting through the bridge rather than `fetch` is equally deliberate: the shared secret stays server-side, and the App — a ~450 KB HTML string handed to every user — never holds a credential.
+**The App makes zero external requests, and that is load-bearing.** It needs no `_meta.ui.csp` at all, which is why the host CSP bug that killed the previous Tally embed cannot recur (see the sharp edges). Submitting through the bridge rather than `fetch` is equally deliberate: the shared secret stays server-side, and the App — a ~246 KB HTML string handed to every user — never holds a credential.
 
 ## Adding or editing tools
 
@@ -73,12 +73,16 @@ Most configuration is in-source. **Two env vars are the exception** — see `.en
 - **`claude.ai` and Claude Desktop ignore `frameDomains`** in `_meta.ui.csp` (upstream `anthropics/claude-ai-mcp#40`). **Escaped, not fixed** — kept here because it constrains any future UI work: **never put a third-party iframe in an MCP App.** Nesting an iframe of *our own* form would hit the identical bug; the shape is the problem, not Tally. The old evidence was `Framing 'https://tally.so/' violates … "frame-src 'self' blob: data:"` with `tally.so` present in the frame URL's `connect-src`/`resource-src` but no `frame-src` parameter at all. Since v2.0.0 the frame URL reads `mcp_apps?stable-origin=true&resource-src=https://assets.claude.ai&dev=true` — no tally.so, and a clean console (verified in Claude Desktop, 5 October 2026).
 - **`app.callServerTool()` needs the host's `serverTools` capability.** Claude Desktop, basic-host and Inspector all declare it (verified 5 October 2026); claude.ai is untested since v2.0.0. Without it the form cannot submit, so `src/mcp-app.ts` probes on load — not on submit — and shows a "continue on the web" fallback instead of a form. Keep that ordering: a form whose submit button silently does nothing is worse than no form, because it looks like it worked. **The fallback has never run in a real host**, only under a stubbed capability — re-verify it if you touch it.
 - **`visibility: ["app"]` is a host-side hint, not an access control.** Claude Desktop does honour it: the model lists three tools while the App calls the fourth. But `tools/list` returns `submit_contact_form` to every client and the server filters nothing, so a host that ignores the flag exposes it to the model. It must stay safe when called directly — hence `consentPrivacy: z.literal(true)`, and upstream recording every such submission as `source='mcp'`.
-- **`StreamableHTTPServerTransport` is constructed per-request** in `api/mcp.ts` with `sessionIdGenerator: undefined` (no session reuse). If you add stateful tools that need per-session memory, this is the place to revisit — currently every request is independent.
+- **One endpoint serves two protocol eras.** `api/mcp.ts` mounts `createMcpHandler(() => createServer())`, which builds a fresh server per request. `legacy` is left at its default `'stateless'`; **never pass `'reject'`** — that refuses every host still on the 2025 revision. Clients default to the legacy handshake with no probe, so they are unaffected; `versionNegotiation: { mode: 'auto' }` opts into 2026-07-28.
+- **`GET` and `DELETE` on `/mcp` return `405`.** They are 2025 session operations and stateless serving has no session to attach them to. This changed in v2.1.0 (they used to return 200) and is the SDK's documented stateless idiom, not a fault. Verified harmless for a real v1.30.0 SDK client and for `tools/basic-host`; **not yet re-verified in Claude Desktop or claude.ai since v2.1.0**.
+- **Do not write `app.all("/mcp", toNodeHandler(handler))`.** It fails two ways: `createMcpExpressApp` installs `express.json()`, so the stream is already drained and the handler answers `-32700 Parse error: Invalid JSON`; and Express calls a route handler as `(req, res, next)` while the handler's third parameter is `parsedBody`, so it receives `next` as the body. Pass `req.body` explicitly — see the comment in `api/mcp.ts`.
+- **Per-request state** is `requestState` now, not sessions. This server has none; if you add a multi-round flow, that is the mechanism.
+- **`tools/basic-host` is deliberately pinned to SDK v1**, which makes it a 1.x-host-against-2.x-server compatibility test. Don't "upgrade" it to match the root package — that would throw the test away.
 
 ## Build / tsconfig topology
 
 - `tsconfig.json` — client + shared type-checking (the App UI in `src/`).
-- `tsconfig.server.json` — emits `.d.ts` and compiled JS for the server (`server.ts`, `main.ts`, `api/mcp.ts`, plus `src/contact-contract.ts`, which the server imports for its `z.enum` of goal options).
+- `tsconfig.server.json` — emits `.d.ts` and compiled JS for the server (`server.ts`, `main.ts`, `api/mcp.ts`, plus `src/contact-contract.ts`, which the server imports for its `z.enum` of goal options). SDK imports are the v2 split packages: `@modelcontextprotocol/server` (McpServer, `createMcpHandler`, result types), `/server/stdio` (`serveStdio`), `/node` (`toNodeHandler`), `/express` (`createMcpExpressApp`).
 - `tsconfig.scripts.json` — type-checks `scripts/` only, `noEmit`. It needs an explicit `"types": ["node"]`; without it, automatic `@types` discovery does not apply through `extends` and every `node:` import fails to resolve.
 - `vite.config.ts` — bundles the App UI (input from the `INPUT` env var), and hosts the `webweaver:inline-app-html` plugin that emits `generated/mcp-app-html.ts`.
 - The full build (`npm run build`): Vite bundle (+ inline HTML into `generated/`) → typecheck client → typecheck scripts → typecheck server → emit server JS. Order matters: the server type-check depends on the generated module.
