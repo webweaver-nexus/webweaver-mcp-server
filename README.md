@@ -176,7 +176,7 @@ Re-check per release; these are observations, not guarantees.
 
 | Host | Form renders | Controls live | `serverTools` (submit) | Honours `visibility: ["app"]` |
 |---|---|---|---|---|
-| Claude Desktop | ✅ | ✅ | ✅ | ✅ |
+| Claude Desktop | ✅ | ✅ | ✅ | ✅ |  *(re-verified on v2.1.0, 6 Oct 2026)*
 | `tools/basic-host` | ✅ | ✅ | ✅ | n/a (shows all tools) |
 | MCP Inspector | ✅ | ✅ | ✅ | ❌ lists it |
 | claude.ai connector | untested since v2.0.0 | — | — | — |
@@ -402,9 +402,11 @@ session for 2025's session operations to act on, so `GET` and `DELETE` are
 answered `405 Method not allowed`. They previously returned `200`.
 
 This is the SDK's documented stateless idiom rather than a fault. Verified not
-to affect a real v1.30.0 SDK client or `tools/basic-host` — neither needs that
-stream for request/response work. **Claude Desktop and claude.ai have not been
-re-verified since v2.1.0.** `POST` is unchanged.
+to affect a real v1.30.0 SDK client, `tools/basic-host`, or **Claude Desktop** —
+none needs that stream for request/response work. In Claude Desktop the form
+rendered, submitted and reached Supabase with no `405` appearing anywhere in
+its console. **claude.ai has not been re-verified since v2.0.0.** `POST` is
+unchanged.
 
 Clients default to the 2025 handshake **with no probe**, so nothing has to
 change on their side. A client opting in with
