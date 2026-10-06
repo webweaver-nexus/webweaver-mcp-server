@@ -75,7 +75,7 @@ Two, both for the contact API, both read **only** in `server.ts`. Copy `.env.exa
 | `CONTACT_FORM_SHARED_SECRET` | Bearer token for the landing page's `/api/contact`. Must match that project's value. |
 | `CONTACT_API_BASE_URL` | Where submissions go. Defaults to `https://webweaver-nexus.vercel.app`; a trailing slash is stripped. |
 
-**The secret must never reach the client bundle.** `src/mcp-app.ts` is compiled into a single ~450 KB HTML string served to every user. After any build:
+**The secret must never reach the client bundle.** `src/mcp-app.ts` is compiled into a single ~246 KB HTML string served to every user. After any build:
 
 ```bash
 grep -c 'CONTACT_FORM_SHARED_SECRET' generated/mcp-app-html.ts   # must print 0
@@ -115,7 +115,7 @@ The web UI opens on port `6274`. Set:
 Click **Connect**, then verify across tabs:
 
 1. **Tools** — `get_contact_form`, `get_product_overview`, `get_contact_info` and `submit_contact_form` all appear. The last is marked app-only; Inspector lists it because **filtering by `visibility` is the host's job, not the server's**. The two plain tools return their text when called.
-2. **Resources** — `ui://get-contact-form/mcp-app.html` lists; reading it returns ~450 KB of bundled HTML and carries `_meta.ui.prefersBorder` with **no `csp` key at all**.
+2. **Resources** — `ui://get-contact-form/mcp-app.html` lists; reading it returns ~246 KB of bundled HTML and carries `_meta.ui.prefersBorder` with **no `csp` key at all**.
 3. **Apps** — select `get_contact_form`. The form renders with live, interactive controls and the network panel stays empty. Inspector strips `allow-same-origin`, so working controls here also prove the old Tally breakage was Tally's own storage access rather than a structural sandbox limit.
 
 There is also a CLI, which makes post-deploy checks scriptable without a browser:
@@ -176,12 +176,12 @@ Re-check per release; these are observations, not guarantees.
 
 | Host | Form renders | Controls live | `serverTools` (submit) | Honours `visibility: ["app"]` |
 |---|---|---|---|---|
-| Claude Desktop | ✅ | ✅ | ✅ | ✅ |
+| Claude Desktop | ✅ | ✅ | ✅ | ✅ |  *(re-verified on v2.1.0, 6 Oct 2026)*
 | `tools/basic-host` | ✅ | ✅ | ✅ | n/a (shows all tools) |
 | MCP Inspector | ✅ | ✅ | ✅ | ❌ lists it |
-| claude.ai connector | untested since v2.0.0 | — | — | — |
+| claude.ai connector | ✅ | ✅ | ✅ | ✅ |
 
-Claude Desktop and Inspector rows verified 5 October 2026. Inspector additionally cannot receive `ui/update-model-context`.
+Claude Desktop and Inspector verified 5 October 2026 and re-verified on v2.1.0 on 6 October; claude.ai verified 6 October over a cloudflared tunnel. Inspector additionally cannot receive `ui/update-model-context`.
 
 ## Exposing local dev to claude.ai (Cloudflare tunnel)
 
@@ -222,7 +222,7 @@ curl -X POST https://webweaver-nexus-mcp.vercel.app/mcp \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
 
-# Resource read — should return ~435 KB of bundled HTML.
+# Resource read — should return ~246 KB of bundled HTML.
 # A response under a few KB means the unbundled source HTML was inlined
 # instead of the bundle (the build guards against this — see git history).
 curl -X POST https://webweaver-nexus-mcp.vercel.app/mcp \
@@ -393,6 +393,25 @@ mcp_apps?stable-origin=true&resource-src=https%3A%2F%2Fassets.claude.ai&dev=true
 
 Note the new `stable-origin=true` parameter: Claude Desktop now assigns App frames a stable origin, which is the mechanism behind `_meta.ui.domain`. If that comes with `allow-same-origin`, browser storage may eventually be usable in Apps on this host. Don't rely on it — MCP Inspector still strips the flag, so the opaque-origin rules below still bind.
 
+### `GET` and `DELETE` on `/mcp` return `405`
+
+Since v2.1.0 this endpoint serves both the 2025 protocol era and revision
+**2026-07-28** from one URL, via `createMcpHandler`. Legacy traffic is served
+statelessly — a fresh server instance per request — which means there is no
+session for 2025's session operations to act on, so `GET` and `DELETE` are
+answered `405 Method not allowed`. They previously returned `200`.
+
+This is the SDK's documented stateless idiom rather than a fault. Verified not
+to affect a real v1.30.0 SDK client, `tools/basic-host`, **Claude Desktop**
+**or claude.ai** — none needs that stream for request/response work. In both
+Claude hosts the form rendered, submitted and reached Supabase, with no `405`
+appearing anywhere in either console. `POST` is unchanged.
+
+Clients default to the 2025 handshake **with no probe**, so nothing has to
+change on their side. A client opting in with
+`versionNegotiation: { mode: 'auto' }` negotiates 2026-07-28 instead; both get
+the same tools from the same URL.
+
 ### Hosts without the `serverTools` capability
 
 `app.callServerTool()` requires the host to declare `serverTools`; without it the App cannot submit. **Claude Desktop declares it** — verified 5 October 2026, a submission went through end to end. So does `tools/basic-host`. It remains unverified on claude.ai and other hosts, and a host may withdraw it, so the guard stays.
@@ -439,6 +458,7 @@ That is host courtesy, not enforcement. **`tools/list` returns the tool to every
 
 ## Version History
 
+- **v2.1.0** — Migrated off the monolithic `@modelcontextprotocol/sdk` to the v2 split packages (`server` / `node` / `express` / `client` / `core`, all exact-pinned) and `ext-apps` 1.7.5 → 2.0.3. The endpoint now serves protocol revision **2026-07-28 alongside the 2025 era** from one URL via `createMcpHandler`; clients default to the 2025 handshake with no probe, so nothing has to change on their side. `GET` and `DELETE` on `/mcp` now return `405` — see [Known Limitations](#known-limitations). The bundled App shrank 447 KB → 246 KB purely from the leaner ext-apps. `tools/basic-host` is deliberately left on SDK v1 as a cross-version compatibility test, which passes. No tool, schema or behaviour change.
 - **v2.0.0** — **Breaking:** `join_waitlist` is renamed `get_contact_form` and its resource URI is now `ui://get-contact-form/mcp-app.html`; there is no alias, so a cached client errors until it re-lists. The Tally iframe is replaced by a form rendered natively in the App, which makes zero external requests and therefore declares no `_meta.ui.csp` — the structural fix for hosts that ignore `frameDomains`. Submission goes through a new app-only `submit_contact_form` tool (`_meta.ui.visibility: ["app"]`) which POSTs server-to-server to the landing page's `/api/contact`, so the shared secret never enters the client bundle. Adds the repo's first two env vars and a vendored form contract with `npm run check:contract`. Also removes a `postMessage` listener that had no origin check and trusted any frame claiming to be a Tally submission.
 - **v1.0.2** — Fixed `join_waitlist` rendering an empty panel in every host: the app loaded Tally's `embed.js` but never called `Tally.loadEmbeds()`, so the form iframe was never given a `src`. Also guards `updateModelContext` behind the host capability, and vendors the basic-host harness into `tools/basic-host/` so the `ext-apps` clone is no longer needed.
 - **v1.0.1** — `join_waitlist` now works over stdio (Claude Desktop). The App HTML is compiled into the server instead of read from disk, removing the `process.cwd()` dependency. Rate limiting is now per-client: `trust proxy` was unset, so every caller shared a single 60/min bucket behind Vercel's proxy. Host validation now accepts Vercel preview deployments and `*.trycloudflare.com`, which the documented tunnel workflow needs. Dependencies updated to clear all `npm audit` advisories (MCP SDK 1.29 → 1.30).

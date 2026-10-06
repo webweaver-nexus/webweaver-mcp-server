@@ -3,8 +3,9 @@
  * Exports the Express app as default; Vercel handles request injection.
  */
 
-import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createMcpExpressApp } from "@modelcontextprotocol/express";
+import { toNodeHandler } from "@modelcontextprotocol/node";
+import { createMcpHandler } from "@modelcontextprotocol/server";
 import cors from "cors";
 import type { NextFunction, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
@@ -93,30 +94,36 @@ app.use(
   }),
 );
 
-app.all("/mcp", async (req: Request, res: Response) => {
-  const server = createServer();
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-  });
+// Serves protocol revision 2026-07-28 *and* the 2025 era from one endpoint.
+//
+// `legacy` defaults to 'stateless': each legacy request is answered by a fresh
+// instance from this same factory, which is what this server already did by
+// hand with `sessionIdGenerator: undefined`. Do NOT pass 'reject' — that would
+// refuse every host that has not adopted the new revision, which is currently
+// all of them. Clients default to the 2025 handshake with no probe, so they
+// keep working untouched; a client opting in with
+// `versionNegotiation: { mode: 'auto' }` gets the modern era instead.
+//
+// One consequence worth knowing: stateless serving has no session to attach
+// 2025's session operations to, so GET and DELETE on /mcp are now answered
+// `405 Method not allowed` where they previously returned 200. That is the
+// SDK's documented stateless idiom, not a fault.
+const mcpHandler = createMcpHandler(() => createServer(), {
+  onerror: (error) => console.error("MCP error:", error),
+});
 
-  res.on("close", () => {
-    transport.close().catch(() => {});
-    server.close().catch(() => {});
-  });
+const nodeHandler = toNodeHandler(mcpHandler);
 
-  try {
-    await server.connect(transport);
-    await transport.handleRequest(req, res, req.body);
-  } catch (error) {
-    console.error("MCP error:", error);
-    if (!res.headersSent) {
-      res.status(500).json({
-        jsonrpc: "2.0",
-        error: { code: -32603, message: "Internal server error" },
-        id: null,
-      });
-    }
-  }
+// Hand the handler the body Express already parsed. Two reasons this is not
+// just `app.all("/mcp", toNodeHandler(mcpHandler))`:
+//   1. `createMcpExpressApp` installs `express.json()`, so the request stream
+//      is already drained by the time the handler runs — it would see an empty
+//      body and answer `-32700 Parse error: Invalid JSON`.
+//   2. Express calls a route handler as `(req, res, next)`, and the handler's
+//      third parameter is `parsedBody` — so passing it directly would hand it
+//      the `next` function as the request body.
+app.all("/mcp", (req: Request, res: Response) => {
+  void nodeHandler(req, res, req.body);
 });
 
 export default app;

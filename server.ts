@@ -3,11 +3,11 @@ import {
   registerAppTool,
   RESOURCE_MIME_TYPE,
 } from "@modelcontextprotocol/ext-apps/server";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type {
-  CallToolResult,
-  ReadResourceResult,
-} from "@modelcontextprotocol/sdk/types.js";
+import {
+  McpServer,
+  type CallToolResult,
+  type ReadResourceResult,
+} from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { MCP_APP_HTML } from "./generated/mcp-app-html.js";
 import {
@@ -57,7 +57,7 @@ function submitResult(outcome: SubmitOutcome, text: string): CallToolResult {
 export function createServer(): McpServer {
   const server = new McpServer({
     name: "WebWeaver Nexus",
-    version: "2.0.0",
+    version: "2.1.0",
   });
 
   // ── MCP App tool: get_contact_form ───────────────────────────────────
@@ -73,7 +73,7 @@ export function createServer(): McpServer {
         "about a particular service. Call this when the user wants to make " +
         "contact; they fill the form in themselves, so do not collect their " +
         "details in the conversation first.",
-      inputSchema: {},
+      inputSchema: z.object({}),
       _meta: { ui: { resourceUri: contactFormResourceUri } },
     },
     async (): Promise<CallToolResult> => {
@@ -148,7 +148,7 @@ export function createServer(): McpServer {
         openWorldHint: true,
       },
       _meta: { ui: { visibility: ["app"] } },
-      inputSchema: {
+      inputSchema: z.object({
         fullName: z.string().trim().min(1).max(120),
         email: z.email().max(254),
         company: z.string().trim().max(160).optional(),
@@ -160,7 +160,7 @@ export function createServer(): McpServer {
         // Epoch ms from the App. Required upstream, but its plausibility range
         // is only enforced for untrusted browser callers, not for us.
         renderedAt: z.number().int().nonnegative(),
-      },
+      }),
     },
     async (args): Promise<CallToolResult> => {
       const secret = process.env.CONTACT_FORM_SHARED_SECRET;

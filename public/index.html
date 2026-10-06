@@ -17,7 +17,16 @@
   <meta name="color-scheme" content="light dark">
   <title>WebWeaver Nexus — MCP Server</title>
   <meta name="description" content="An MCP server exposing WebWeaver Nexus services — contact form, product overview and contact links — to AI hosts such as Claude Desktop and ChatGPT.">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🕸️</text></svg>">
+  <!--
+    WebWeaver Nexus's own mark, copied byte-for-byte from the landing page's
+    src/app/ icons so the two properties match. favicon.ico carries 48/32/16px
+    in one file; icon.png is the 96px version for displays that want it.
+    Deliberately NOT the landing page's icon0.svg — despite the extension that
+    is a 1024px PNG base64'd inside an SVG wrapper, ~992 KB, four times the
+    whole App bundle for a tab icon.
+  -->
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" href="/icon.png" type="image/png" sizes="96x96">
   <style>
     :root {
       color-scheme: light dark;
