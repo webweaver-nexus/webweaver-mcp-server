@@ -57,7 +57,7 @@ function submitResult(outcome: SubmitOutcome, text: string): CallToolResult {
 export function createServer(): McpServer {
   const server = new McpServer({
     name: "WebWeaver Nexus",
-    version: "2.1.0",
+    version: "2.1.1",
   });
 
   // ── MCP App tool: get_contact_form ───────────────────────────────────
@@ -321,11 +321,13 @@ export function createServer(): McpServer {
               "- Skilled Trade Professionals. Local customers increasingly ask an AI assistant for a recommendation instead of searching. We make sure your business is the name it gives back.",
               "",
               "Services:",
-              "- Tier 1 — Modern Web Foundations (AI-Ready Landing Pages & Websites)",
+              "- Tier 1 — Modern Web Foundations. Two options, each starting at a single page and growing into a website as you need more pages: 1A Essentials, optimised for Local/Standard SEO, and 1B AI-Search Optimised, which adds AEO and GEO on top.",
               "- Tier 2 — Embedded AI Integrations (Internal AI Intelligence to Automate your Web Services)",
               "- Tier 3 — External AI App Connections (Tools, Apps, and Widgets to securely connect external AI Users to your Web Services)",
               "",
               "This MCP server is our own Tier 3 implementation. The tools being called here right now are a working example of what we build for clients — showing it, rather than just describing it.",
+              "",
+              "For current prices and timescales see the website — this overview deliberately carries no figures, so there is nothing here to go stale. Do not quote prices from memory.",
               "",
               "Learn more at https://webweaver-nexus.vercel.app/",
             ].join("\n"),

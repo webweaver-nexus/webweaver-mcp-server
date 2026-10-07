@@ -18,7 +18,7 @@
  */
 
 /** Bumped by the landing page whenever the options or field set change. */
-export const CONTRACT_VERSION = "1.0.0";
+export const CONTRACT_VERSION = "2.0.0";
 
 /**
  * The dropdown, in display order. `tier` is published explicitly rather than
@@ -27,9 +27,8 @@ export const CONTRACT_VERSION = "1.0.0";
  */
 export const PRIMARY_GOAL_OPTIONS = [
   { value: "I'm not sure yet - I need a Discovery & Audit", tier: null },
-  { value: "New AI-Ready Landing Page, optimised for AI Search - Tier 1A", tier: "1A" },
-  { value: "New Foundational Website, optimised for Local/Standard SEO - Tier 1B", tier: "1B" },
-  { value: "New AI-Ready Website, optimised for AI Search - Tier 1C", tier: "1C" },
+  { value: "Essentials landing page or website, optimised for Local/Standard SEO - Tier 1A", tier: "1A" },
+  { value: "AI-Search Optimised landing page or website, optimised for AI Search - Tier 1B", tier: "1B" },
   { value: "Automation of Customer Support through my landing page/website - Tier 2A", tier: "2A" },
   { value: "Automation of Lead Qualification through my landing page/website - Tier 2B", tier: "2B" },
   { value: "Secure Tools Connection to my web service from ChatGPT, etc. - Tier 3A", tier: "3A" },
