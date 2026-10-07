@@ -40,5 +40,8 @@
     "typescript": "^6.0.3",
     "vite": "^8.2.2",
     "vite-plugin-singlefile": "^2.3.3"
+  },
+  "overrides": {
+    "shell-quote": "^1.12.0"
   }
 }
