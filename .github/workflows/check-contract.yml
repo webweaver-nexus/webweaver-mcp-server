@@ -1,0 +1,51 @@
+# Detects contract drift between this repo's vendored copy of the contact form
+# contract and the landing page, which owns it.
+#
+# Why this exists: on 7 October 2026 the landing page shipped a Tier 1
+# restructure (CONTRACT_VERSION 1.1.0 → 2.0.0) that retired three option
+# strings. This repo's vendored copy went stale, and every Tier 1 submission
+# from an MCP host was rejected with a 422 — the App painted "Please select an
+# option" on a dropdown the user *had* selected, and since all their Tier 1
+# entries were retired it was unfixable from their side. Enquiries were lost
+# silently. Nothing detected it; it was noticed because submissions had already
+# been failing.
+#
+# `npm run check:contract` could already name the drift precisely. It just was
+# not being run on a schedule. This runs it.
+#
+# A failure here is not a build break — it means the landing page changed the
+# contract and `npm run sync:contract` needs running, followed by a sweep of the
+# hand-written copy the generator does not touch (see CLAUDE.md).
+
+name: Contract drift check
+
+on:
+  schedule:
+    # 08:00 UTC daily. The contract only changes on a landing page deploy, so
+    # daily catches drift within a working day — well before it costs a week of
+    # enquiries.
+    - cron: "0 8 * * *"
+  # So it can be run on demand straight after a landing page deploy, rather
+  # than waiting for the next scheduled window.
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          # Matches `engines` in package.json.
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+
+      # No build step: scripts/contract.ts imports src/contact-contract.ts
+      # directly through tsx, so this needs nothing from dist/ or generated/.
+      # CONTACT_API_BASE_URL is left unset on purpose — production is the
+      # source of truth for the contract.
+      - name: Check the vendored contract against the landing page
+        run: npm run check:contract

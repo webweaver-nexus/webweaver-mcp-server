@@ -92,4 +92,8 @@ Most configuration is in-source. **Two env vars are the exception** — see `.en
 
 - **No tests.** Verification is via the README's `curl` checks, `npm run check:contract`, MCP Inspector (the default harness), and the vendored `tools/basic-host` harness for model-context updates.
 - **Two env vars**, both for the contact API, both read only in `server.ts`. Everything else is in-source. See `.env.example` and the configuration touchpoints above. `npm run serve` loads `.env` from the working directory; the stdio entry point runs with `cwd=/` and cannot, so a stdio host config needs its own `env` block.
-- **No CI for build or test.** The only workflow is the manual-dispatch MCP registry publish (`.github/workflows/publish-mcp-registry.yml`). Vercel auto-deploys on push to `main`.
+- **No CI for build or test.** Two workflows exist, neither of which builds or tests:
+  - `.github/workflows/publish-mcp-registry.yml` — manual-dispatch registry publish.
+  - `.github/workflows/check-contract.yml` — daily `npm run check:contract` against the landing page. A red run means the contract drifted and `npm run sync:contract` is needed, **plus** a sweep of the hand-written copy the generator does not touch. **Caveat: GitHub disables scheduled workflows on public repos after 60 days without a commit**, and this repo goes through quiet spells — a silently disabled drift check is worse than none, so confirm it still runs after a long gap.
+
+  Vercel auto-deploys on push to `main`.
