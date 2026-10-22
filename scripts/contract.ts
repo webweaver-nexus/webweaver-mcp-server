@@ -40,10 +40,12 @@ interface SchemaPayload {
     primaryGoal: { heading: string; placeholder: string };
     privacyPolicy: { heading: string };
     foundingClient: { heading: string };
+    marketingOptIn: { heading: string };
     submit: string;
     submitting: string;
   };
   consentText: string;
+  marketingConsentText: string;
   foundingClientText: string;
   foundingOfferActive: boolean;
 }
@@ -73,6 +75,7 @@ async function fetchSchema(): Promise<SchemaPayload> {
     "options",
     "copy",
     "consentText",
+    "marketingConsentText",
     "foundingClientText",
   ] as const) {
     if (payload[key] === undefined) {
@@ -102,6 +105,7 @@ async function vendoredAsPayload(): Promise<SchemaPayload> {
     })),
     copy: vendored.CONTACT_FORM_COPY,
     consentText: vendored.CONSENT_TEXT,
+    marketingConsentText: vendored.MARKETING_CONSENT_TEXT,
     foundingClientText: vendored.FOUNDING_CLIENT_TEXT,
     foundingOfferActive: vendored.FOUNDING_OFFER_ACTIVE,
   } as SchemaPayload;
@@ -160,6 +164,14 @@ export const CONTACT_FORM_COPY = ${JSON.stringify(schema.copy, null, 2)} as cons
  * showing *what* was consented to, not merely that consent was given.
  */
 export const CONSENT_TEXT = ${q(schema.consentText)};
+
+/**
+ * Shown beside the optional marketing opt-in. Separate from CONSENT_TEXT
+ * because they are different lawful bases: the privacy consent is a
+ * precondition of replying at all, this one is a marketing permission the
+ * enquirer may decline and later withdraw.
+ */
+export const MARKETING_CONSENT_TEXT = ${q(schema.marketingConsentText)};
 
 /** Carries the offer deadline, interpolated upstream so it cannot drift. */
 export const FOUNDING_CLIENT_TEXT = ${q(schema.foundingClientText)};

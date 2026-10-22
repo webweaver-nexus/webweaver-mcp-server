@@ -57,7 +57,7 @@ function submitResult(outcome: SubmitOutcome, text: string): CallToolResult {
 export function createServer(): McpServer {
   const server = new McpServer({
     name: "WebWeaver Nexus",
-    version: "2.1.1",
+    version: "2.2.0",
   });
 
   // ── MCP App tool: get_contact_form ───────────────────────────────────
@@ -157,6 +157,11 @@ export function createServer(): McpServer {
         // not a field with two valid values.
         consentPrivacy: z.literal(true),
         foundingClient: z.boolean().optional(),
+        // Marketing permission, distinct from consentPrivacy above: that one
+        // is a precondition of replying, this is a separate lawful basis the
+        // enquirer may decline. Optional upstream — verified against the live
+        // API, which does not list it among the required fields.
+        marketingOptIn: z.boolean().optional(),
         // Epoch ms from the App. Required upstream, but its plausibility range
         // is only enforced for untrusted browser callers, not for us.
         renderedAt: z.number().int().nonnegative(),
@@ -202,6 +207,7 @@ export function createServer(): McpServer {
             primaryGoal: args.primaryGoal,
             consentPrivacy: true,
             foundingClient: args.foundingClient ?? false,
+            marketingOptIn: args.marketingOptIn ?? false,
             renderedAt: args.renderedAt,
           }),
           signal: AbortSignal.timeout(SUBMIT_TIMEOUT_MS),

@@ -26,6 +26,7 @@ import {
   CONTACT_FORM_COPY,
   FOUNDING_CLIENT_TEXT,
   FOUNDING_OFFER_ACTIVE,
+  MARKETING_CONSENT_TEXT,
   PRIMARY_GOAL_OPTIONS,
 } from "./contact-contract.ts";
 import type { SubmitOutcome } from "./submit-outcome.ts";
@@ -102,6 +103,8 @@ const consentTextEl = el<HTMLLabelElement>("consent-text");
 const foundingFieldEl = el<HTMLDivElement>("founding-field");
 const foundingEl = el<HTMLInputElement>("foundingClient");
 const foundingTextEl = el<HTMLLabelElement>("founding-text");
+const marketingEl = el<HTMLInputElement>("marketingOptIn");
+const marketingTextEl = el<HTMLLabelElement>("marketing-text");
 const submitEl = el<HTMLButtonElement>("submit");
 const formErrorEl = el<HTMLParagraphElement>("form-error");
 const confirmationEl = el<HTMLDivElement>("confirmation");
@@ -170,6 +173,7 @@ interface FormValues {
   primaryGoal: string;
   consentPrivacy: boolean;
   foundingClient: boolean;
+  marketingOptIn: boolean;
 }
 
 function readValues(): FormValues {
@@ -182,6 +186,9 @@ function readValues(): FormValues {
     // A hidden checkbox must never contribute an opt-in, even if it was
     // ticked before the goal changed to an excluded one.
     foundingClient: !foundingFieldEl.hidden && foundingEl.checked,
+    // Always visible, so no such guard is needed — but it is optional
+    // upstream, so an untouched box must send `false`, never be omitted.
+    marketingOptIn: marketingEl.checked,
   };
 }
 
@@ -247,6 +254,7 @@ function applyPlaceholders() {
   companyEl.placeholder = CONTACT_FORM_COPY.company.placeholder;
   submitEl.textContent = CONTACT_FORM_COPY.submit;
   foundingTextEl.textContent = FOUNDING_CLIENT_TEXT;
+  marketingTextEl.textContent = MARKETING_CONSENT_TEXT;
 }
 
 /**
@@ -331,6 +339,7 @@ async function handleSubmit() {
         primaryGoal: values.primaryGoal,
         consentPrivacy: true,
         foundingClient: values.foundingClient,
+        marketingOptIn: values.marketingOptIn,
         renderedAt: RENDERED_AT,
       },
     });

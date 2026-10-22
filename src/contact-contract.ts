@@ -18,7 +18,7 @@
  */
 
 /** Bumped by the landing page whenever the options or field set change. */
-export const CONTRACT_VERSION = "2.0.0";
+export const CONTRACT_VERSION = "2.1.0";
 
 /**
  * The dropdown, in display order. `tier` is published explicitly rather than
@@ -61,6 +61,9 @@ export const CONTACT_FORM_COPY = {
   "foundingClient": {
     "heading": "Founding Client (optional)"
   },
+  "marketingOptIn": {
+    "heading": "Email updates (optional)"
+  },
   "submit": "Contact Us",
   "submitting": "Sending…"
 } as const;
@@ -70,6 +73,14 @@ export const CONTACT_FORM_COPY = {
  * showing *what* was consented to, not merely that consent was given.
  */
 export const CONSENT_TEXT = "I agree to the Privacy Policy and consent to WebWeaver Nexus using my contact details to respond to this enquiry.";
+
+/**
+ * Shown beside the optional marketing opt-in. Separate from CONSENT_TEXT
+ * because they are different lawful bases: the privacy consent is a
+ * precondition of replying at all, this one is a marketing permission the
+ * enquirer may decline and later withdraw.
+ */
+export const MARKETING_CONSENT_TEXT = "I'd also like to receive occasional emails from WebWeaver Nexus about AI-ready web strategy, new services and offers. I can unsubscribe at any time.";
 
 /** Carries the offer deadline, interpolated upstream so it cannot drift. */
 export const FOUNDING_CLIENT_TEXT = "I'd like to be considered for the Founding Client Programme (open until 18 December 2026).";
