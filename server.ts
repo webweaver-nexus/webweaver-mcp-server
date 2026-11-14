@@ -11,9 +11,18 @@ import {
 import { z } from "zod";
 import { MCP_APP_HTML } from "./generated/mcp-app-html.js";
 import {
+  issueFormToken,
+  readFormTokenSecret,
+  verifyFormToken,
+} from "./form-token.js";
+import {
   PRIMARY_GOAL_OPTIONS,
   type PrimaryGoal,
 } from "./src/contact-contract.js";
+import {
+  FORM_TOKEN_META_KEY,
+  type SubmitOutcome,
+} from "./src/submit-outcome.js";
 
 /** Landing page that owns the contact API. Overridden for local development. */
 const DEFAULT_CONTACT_API_BASE_URL = "https://webweaver-nexus.vercel.app";
@@ -28,21 +37,13 @@ const PRIMARY_GOAL_VALUES = PRIMARY_GOAL_OPTIONS.map(
   (option) => option.value,
 ) as unknown as [PrimaryGoal, ...PrimaryGoal[]];
 
-/**
- * Machine-readable outcome attached to every `submit_contact_form` result.
- * The App switches on `kind` to decide whether to paint field errors, offer a
- * retry, or fall back to the web form.
- */
-type SubmitOutcome =
-  | { ok: true }
-  | {
-      ok: false;
-      kind: "validation" | "config" | "rate_limit" | "network" | "server";
-      message: string;
-      fieldErrors?: Record<string, string[]>;
-      retryAfterSeconds?: number;
-    };
+/** Shown for any form-token failure. Deliberately one message for all of them. */
+const FORM_EXPIRED_MESSAGE =
+  "This form has expired. Please ask for the contact form again.";
 
+// SubmitOutcome is the shared contract in src/submit-outcome.ts. It used to be
+// duplicated here, which meant a new failure `kind` had to be added in two
+// places — the drift that module exists to prevent.
 function submitResult(outcome: SubmitOutcome, text: string): CallToolResult {
   return {
     content: [{ type: "text", text }],
@@ -74,10 +75,18 @@ export function createServer(): McpServer {
         "contact; they fill the form in themselves, so do not collect their " +
         "details in the conversation first.",
       inputSchema: z.object({}),
+      // Opens a form; changes nothing. readOnlyHint defaults to false in the
+      // MCP spec, so without this Gemini filed it under "Write / delete".
+      // Issuing a fresh form token per call is not a state change.
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
       _meta: { ui: { resourceUri: contactFormResourceUri } },
     },
     async (): Promise<CallToolResult> => {
-      return {
+      const result: CallToolResult = {
         content: [
           {
             type: "text",
@@ -88,6 +97,22 @@ export function createServer(): McpServer {
           },
         ],
       };
+
+      // Issue the form token. It goes in `_meta`, never `content` (the model's
+      // text) and never `structuredContent`. The App reads it from the
+      // tool-result notification. See src/submit-outcome.ts.
+      const secret = readFormTokenSecret(process.env.MCP_FORM_TOKEN_SECRET);
+      if (secret.ok) {
+        result._meta = { [FORM_TOKEN_META_KEY]: issueFormToken(secret.secret) };
+      } else {
+        // The form still renders — opening it changes nothing — but it cannot
+        // be submitted, and the App shows its "continue on the web" fallback.
+        console.error(
+          `[get_contact_form] MCP_FORM_TOKEN_SECRET is ${secret.problem === "unset" ? "not set" : "shorter than 32 characters"}; ` +
+            "issuing no form token, so submissions will be refused",
+        );
+      }
+      return result;
     },
   );
 
@@ -165,9 +190,50 @@ export function createServer(): McpServer {
         // Epoch ms from the App. Required upstream, but its plausibility range
         // is only enforced for untrusted browser callers, not for us.
         renderedAt: z.number().int().nonnegative(),
+        // Issued by get_contact_form, carried by the App. Optional in the
+        // schema only so that a missing token produces our clear message
+        // rather than an SDK input-validation error — it is required in
+        // practice, and checked before anything else below.
+        formToken: z.string().max(512).optional(),
       }),
     },
     async (args): Promise<CallToolResult> => {
+      // ── Form token: checked before anything else ─────────────────────────
+      // Visibility ["app"] relies on every host honouring the spec; Gemini
+      // does not. This makes the server enforce "only the rendered form can
+      // submit" itself. Nothing is sent anywhere until it passes.
+      const tokenSecret = readFormTokenSecret(process.env.MCP_FORM_TOKEN_SECRET);
+      if (!tokenSecret.ok) {
+        // Fail closed. Never fall back to accepting unsigned submissions.
+        console.error(
+          `[submit_contact_form] MCP_FORM_TOKEN_SECRET is ${tokenSecret.problem === "unset" ? "not set" : "shorter than 32 characters"}; ` +
+            "refusing every submission until it is configured",
+        );
+        return submitResult(
+          {
+            ok: false,
+            kind: "config",
+            message:
+              "This server is not configured to accept submissions yet. " +
+              "Please use the contact form on the website instead.",
+          },
+          "Submission refused: the server has no form-token secret configured.",
+        );
+      }
+
+      const verdict = verifyFormToken(args.formToken, tokenSecret.secret);
+      if (!verdict.ok) {
+        // The reason is logged for diagnosis; the user gets one message for
+        // every failure. The token carries no personal data, so neither does
+        // this log line.
+        console.warn(`[submit_contact_form] form token rejected: ${verdict.reason}`);
+        return submitResult(
+          { ok: false, kind: "form_token", message: FORM_EXPIRED_MESSAGE },
+          `Submission refused: form token ${verdict.reason}. ${FORM_EXPIRED_MESSAGE}`,
+        );
+      }
+
+      // ── Existing submission chain, unchanged ─────────────────────────────
       const secret = process.env.CONTACT_FORM_SHARED_SECRET;
       if (!secret) {
         console.error(
@@ -308,7 +374,16 @@ export function createServer(): McpServer {
 
   server.registerTool(
     "get_product_overview",
-    { description: "Returns a short description of what WebWeaver Nexus does." },
+    {
+      title: "WebWeaver Nexus Product Overview",
+      description: "Returns a short description of what WebWeaver Nexus does.",
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
     async (): Promise<CallToolResult> => {
       return {
         content: [
@@ -345,7 +420,16 @@ export function createServer(): McpServer {
 
   server.registerTool(
     "get_contact_info",
-    { description: "Returns contact methods and links for WebWeaver Nexus." },
+    {
+      title: "WebWeaver Nexus Contact Details",
+      description: "Returns contact methods and links for WebWeaver Nexus.",
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
     async (): Promise<CallToolResult> => {
       return {
         content: [

@@ -6,6 +6,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "cross-env INPUT=mcp-app.html vite build && tsc --noEmit && tsc --noEmit -p tsconfig.scripts.json && tsc --noEmit -p tsconfig.server.json && tsc -p tsconfig.server.json",
+    "test": "node --import tsx --test 'test/**/*.test.ts'",
     "check:contract": "tsx scripts/contract.ts check",
     "sync:contract": "tsx scripts/contract.ts sync",
     "watch": "cross-env INPUT=mcp-app.html vite build --watch",

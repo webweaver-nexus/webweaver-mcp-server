@@ -9,6 +9,8 @@
   },
   "include": [
     "scripts/**/*.ts",
-    "src/contact-contract.ts"
+    "src/contact-contract.ts",
+    "test/**/*.ts",
+    "form-token.ts"
   ]
 }

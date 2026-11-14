@@ -29,7 +29,7 @@ import {
   MARKETING_CONSENT_TEXT,
   PRIMARY_GOAL_OPTIONS,
 } from "./contact-contract.ts";
-import type { SubmitOutcome } from "./submit-outcome.ts";
+import { FORM_TOKEN_META_KEY, type SubmitOutcome } from "./submit-outcome.ts";
 import "./global.css";
 import "./mcp-app.css";
 
@@ -52,6 +52,13 @@ const PRIVACY_LINK_LABEL = "Privacy Policy";
  * `sessionStorage` and `document.cookie` all throw `SecurityError`.
  */
 const RENDERED_AT = Date.now();
+
+/**
+ * The form token from get_contact_form's tool result, sent back on submit so
+ * the server can tell this form apart from a model calling the tool directly.
+ * Module scope, never storage, for the same opaque-origin reason as above.
+ */
+let formToken: string | undefined;
 
 type FieldName =
   | "fullName"
@@ -320,6 +327,15 @@ async function handleSubmit() {
   attempted = true;
   setFormError(null);
 
+  if (!formToken) {
+    // No token ever arrived, so the server would refuse this. Offer the web
+    // form rather than a message telling them to "ask again", which would
+    // only produce another form with the same problem.
+    console.warn("[mcp-app] No form token received; offering the web form instead.");
+    showFallback(Boolean(app.getHostCapabilities()?.openLinks));
+    return;
+  }
+
   const values = readValues();
   const errors = validate(values);
   if (Object.keys(errors).length > 0) {
@@ -341,6 +357,7 @@ async function handleSubmit() {
         foundingClient: values.foundingClient,
         marketingOptIn: values.marketingOptIn,
         renderedAt: RENDERED_AT,
+        formToken,
       },
     });
 
@@ -415,7 +432,13 @@ async function notifyHost(values: FormValues) {
  * whose submit button silently does nothing is worse than no form at all: it
  * looks like it worked.
  */
+let fallbackShown = false;
+
 function showFallback(canOpenLinks: boolean) {
+  // Reachable from three places now (no serverTools, no token delivered, no
+  // token at submit). Guarded so the click listener is never attached twice.
+  if (fallbackShown) return;
+  fallbackShown = true;
   formEl.hidden = true;
   fallbackEl.hidden = false;
 
@@ -475,6 +498,23 @@ app.onteardown = async () => {
 
 app.onerror = console.error;
 app.onhostcontextchanged = handleHostContextChanged;
+
+// Registered before connect(), deliberately: the host may send the tool result
+// straight after the handshake, and the SDK warns that a one-shot handler set
+// later can miss it. Reads capabilities lazily rather than through the
+// `canOpenLinks` const below, which is not yet initialised at this point.
+app.ontoolresult = (result) => {
+  const token = result._meta?.[FORM_TOKEN_META_KEY];
+  if (typeof token === "string" && token.length > 0) {
+    formToken = token;
+    return;
+  }
+  // The result arrived without a token: the host dropped `_meta`, or the
+  // server has no signing secret. Either way a submit can only be refused, so
+  // say so now rather than after the whole form has been filled in.
+  console.warn("[mcp-app] Tool result carried no form token; offering the web form instead.");
+  showFallback(Boolean(app.getHostCapabilities()?.openLinks));
+};
 
 await app.connect();
 

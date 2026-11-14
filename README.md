@@ -12,12 +12,14 @@ Published to the official MCP registry as `io.github.webweaver-nexus/webweaver-m
 
 ## Tools
 
-| Tool | Type | Description |
-|------|------|-------------|
-| `get_contact_form` | MCP App (UI) | Renders the WebWeaver Nexus contact form natively inside the host |
-| `get_product_overview` | Plain tool | Returns a description of what WebWeaver Nexus does |
-| `get_contact_info` | Plain tool | Returns contact methods and links |
-| `submit_contact_form` | App-only | Submits the form. Marked `_meta.ui.visibility: ["app"]`, so compliant hosts hide it from the model |
+| Tool | Type | Annotations | Description |
+|------|------|-------------|-------------|
+| `get_contact_form` | MCP App (UI) | read-only | Renders the contact form natively, and issues a form token |
+| `get_product_overview` | Plain tool | read-only, idempotent | Returns a description of what WebWeaver Nexus does |
+| `get_contact_info` | Plain tool | read-only, idempotent | Returns contact methods and links |
+| `submit_contact_form` | App-only | **write**, open-world | Submits the form. `_meta.ui.visibility: ["app"]`, and requires a valid form token |
+
+Every tool declares a `title` and MCP tool annotations. This matters more than it looks: **`readOnlyHint` defaults to `false` in the MCP spec**, so a tool that omits it is presumed to write. Before these were added, Gemini filed all four tools under "Write / delete", look-ups included. The three read-only tools now say so, and `submit_contact_form` is correctly declared a write that reaches outside services (`openWorldHint: true`).
 
 The form is rendered in the App's own document and makes **no external requests**. It submits through the MCP bridge (`app.callServerTool`) to `submit_contact_form`, which POSTs server-to-server to the landing page's `/api/contact` with a bearer secret. That shape is why it works where the previous Tally iframe did not — see [Known Limitations](#known-limitations).
 
@@ -68,12 +70,15 @@ The server listens at `http://localhost:3001/mcp` by default.
 
 ### Environment variables
 
-Two, both for the contact API, both read **only** in `server.ts`. Copy `.env.example` to `.env` for local development.
+Three, all read **only** on the server side. Copy `.env.example` to `.env` for local development.
 
 | Variable | Purpose |
 |---|---|
 | `CONTACT_FORM_SHARED_SECRET` | Bearer token for the landing page's `/api/contact`. Must match that project's value. |
 | `CONTACT_API_BASE_URL` | Where submissions go. Defaults to `https://webweaver-nexus.vercel.app`; a trailing slash is stripped. |
+| `MCP_FORM_TOKEN_SECRET` | Signs the form token. Generate with `openssl rand -hex 32`; must be ≥ 32 characters. **Unset or short → every submission is refused.** See [The form-token guard](#the-form-token-guard). |
+
+**Set `MCP_FORM_TOKEN_SECRET` in Vercel for both Preview and Production** before deploying. Without it the form still opens but cannot be submitted — it fails closed by design.
 
 **The secret must never reach the client bundle.** `src/mcp-app.ts` is compiled into a single ~246 KB HTML string served to every user. After any build:
 
@@ -97,6 +102,17 @@ npm run check:contract   # fail if the copy has drifted
 ```
 
 Never hand-edit that file. The 8 goal option strings are also the keys of `GOAL_PARAGRAPHS` in the landing page's welcome email, so a single byte of drift silently drops the personalised paragraph with no error anywhere. The copy is committed rather than fetched at build time so that `npm run build` works offline and on a fresh clone; `check:contract` is a release step, not a build step.
+
+## Tests
+
+```bash
+npm run build   # first — server.ts imports the generated App HTML
+npm test
+```
+
+Node's built-in test runner through `tsx`, so no extra dependencies. `test/form-token.test.ts` covers the token itself; `test/submit-guard.test.ts` drives the real server over an in-memory MCP transport and stubs `fetch`, so it can assert that **a bad token sends nothing to the contact API**. It also pins the tool annotations and the app-only visibility declaration.
+
+They run locally only, not in CI.
 
 ## Testing with MCP Inspector (default harness)
 
@@ -422,9 +438,27 @@ Because the capability is present on the hosts tested, **the fallback is insuran
 
 ### `visibility: ["app"]` is a hint, not an access control
 
-`submit_contact_form` declares `_meta.ui.visibility: ["app"]`, and **Claude Desktop honours it**: asked to list its tools, the model named only `get_contact_form`, `get_contact_info` and `get_product_overview`, having just called the submit tool from inside the App (verified 5 October 2026).
+`submit_contact_form` declares exactly `_meta: { ui: { visibility: ["app"] } }`. The MCP Apps spec (2026-01-26) says a host **MUST NOT** include such a tool in the model's tool list. **Claude Desktop, claude.ai and ChatGPT comply.** **Gemini does not** — observed 13 November 2026 listing `submit_contact_form` as an ordinary action.
 
-That is host courtesy, not enforcement. **`tools/list` returns the tool to every client** — the server does no filtering, and the spec puts it on the host. A host that ignores the flag exposes the tool to its model. That is tolerable rather than dangerous: `consentPrivacy` must be literal `true`, and the landing page records every submission on this path as `source='mcp'`, so anything synthesised is identifiable. Don't treat the flag as a security boundary.
+That is why the flag is not relied on alone. **`tools/list` returns the tool to every client** — the server does no filtering, and the spec puts that on the host. The form-token guard below makes the server enforce the rule itself.
+
+### The form-token guard
+
+`submit_contact_form` refuses any submission that does not carry a valid, unexpired token issued by `get_contact_form`. The aim is that only the rendered form can submit, whatever the host does with visibility.
+
+**How it works**
+
+- `get_contact_form` issues `v1.<issuedAt>.<nonce>.<signature>` — an HMAC-SHA256 over a timestamp and 16 random bytes, keyed by `MCP_FORM_TOKEN_SECRET`. It contains **no personal data**.
+- It is delivered in the tool result's **`_meta`** under `io.github.webweaver-nexus/formToken` — never in `content`, never in `structuredContent`. The App receives the full result, `_meta` included, through `ui/notifications/tool-result`.
+- `submit_contact_form` checks the token **before anything else**: signature in constant time, then expiry. If it is missing, tampered with or older than **30 minutes**, it returns *"This form has expired. Please ask for the contact form again."* and **sends nothing anywhere**.
+- If `MCP_FORM_TOKEN_SECRET` is unset or shorter than 32 characters, submissions **fail closed** with a server-side error log. It never falls back to accepting unsigned submissions.
+- If the App receives a result without a token — a host that drops `_meta`, or a server missing its secret — it shows the "continue on the web" fallback straight away, rather than letting someone fill in a form that can only be refused.
+
+**Its limits, stated plainly**
+
+- **Not single-use.** Replay protection would need a store of spent nonces, which the deliberately stateless design avoids. The 30-minute expiry bounds the window instead.
+- **Only as strong as the host's handling of `_meta`.** The spec describes `_meta` as metadata *"not intended for model context"* — but that is best-practice guidance, not a MUST. A host that ignores the visibility MUST could equally pass `_meta` to its model, which could then read a token and submit. So this raises the bar considerably; it is not a guarantee. **No server-side scheme can be**: the App and the model share a host, and the server cannot tell which of them made a given call if the host leaks App-bound data.
+- The existing safeguards still apply underneath it: `consentPrivacy` must be literal `true`, and the landing page records every submission on this path as `source='mcp'`, so anything synthesised is identifiable.
 
 
 ## Project Structure
@@ -435,15 +469,17 @@ That is host courtesy, not enforcement. **`tools/list` returns the tool to every
 │   └── index.html       # Static landing page served at / (not part of the MCP server)
 ├── main.ts              # Local-dev entry — HTTP & stdio transports
 ├── server.ts            # Tool & resource registration (shared)
+├── form-token.ts        # Form-token issue/verify — server-side only, never imported from src/
 ├── mcp-app.html         # App UI template (Vite entry, source)
 ├── src/
 │   ├── mcp-app.ts       # Client-side App lifecycle + native contact form
 │   ├── contact-contract.ts # GENERATED — form contract vendored from the landing page
-│   ├── submit-outcome.ts   # Result type shared by server.ts and the App
+│   ├── submit-outcome.ts   # Result type + form-token _meta key, shared by server.ts and the App
 │   ├── mcp-app.css      # App-specific styles
 │   └── global.css       # Host variable fallbacks & reset
 ├── scripts/
 │   └── contract.ts      # sync / check the vendored contract
+├── test/                # npm test — node:test via tsx, no extra dependencies
 ├── tools/
 │   └── basic-host/      # Vendored MCP host harness (model context updates)
 ├── generated/           # Build artifact — bundled HTML as a TS constant (git-ignored)
@@ -451,8 +487,8 @@ That is host courtesy, not enforcement. **`tools/list` returns the tool to every
 ├── vite.config.ts       # Vite + singlefile plugin config
 ├── tsconfig.json        # Client + shared type-checking
 ├── tsconfig.server.json # Server declaration emit
-├── tsconfig.scripts.json # Type-checks scripts/ (noEmit)
-├── .env.example         # CONTACT_API_BASE_URL, CONTACT_FORM_SHARED_SECRET
+├── tsconfig.scripts.json # Type-checks scripts/ and test/ (noEmit)
+├── .env.example         # CONTACT_API_BASE_URL, CONTACT_FORM_SHARED_SECRET, MCP_FORM_TOKEN_SECRET
 ├── vercel.json          # Vercel deployment config
 └── package.json
 

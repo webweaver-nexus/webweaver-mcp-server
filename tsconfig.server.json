@@ -1,7 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "declaration": true,
@@ -17,6 +19,8 @@
     "main.ts",
     "api/**/*.ts",
     "generated/**/*.ts",
-    "src/contact-contract.ts"
+    "src/contact-contract.ts",
+    "form-token.ts",
+    "src/submit-outcome.ts"
   ]
 }

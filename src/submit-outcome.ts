@@ -7,7 +7,20 @@
  * `server.ts` (which holds the shared secret). A `kind` string is the contract
  * between them, so it lives in one place rather than being matched by hand at
  * both ends.
+ *
+ * Nothing here may be secret: this module is bundled into the App.
  */
+
+/**
+ * Where `get_contact_form` puts the form token in its tool result's `_meta`.
+ *
+ * `_meta` rather than `content` or `structuredContent`: the MCP Apps spec
+ * describes `content` as the model's text and `_meta` as metadata "not intended
+ * for model context". The App receives the whole CallToolResult — `_meta`
+ * included — through `ui/notifications/tool-result`. Namespaced with the
+ * registry name so it cannot collide with `_meta.ui` or a host's own keys.
+ */
+export const FORM_TOKEN_META_KEY = "io.github.webweaver-nexus/formToken";
 
 export type SubmitFailureKind =
   /** Upstream zod rejected one or more fields; `fieldErrors` is populated. */
@@ -19,7 +32,13 @@ export type SubmitFailureKind =
   /** The contact API could not be reached, or the request timed out. */
   | "network"
   /** Any other non-2xx from the contact API. */
-  | "server";
+  | "server"
+  /**
+   * The form token was missing, tampered with or expired. Checked before
+   * anything else, so nothing was sent anywhere. The remedy is to open the
+   * form again, which issues a fresh token.
+   */
+  | "form_token";
 
 export type SubmitOutcome =
   | { ok: true }
