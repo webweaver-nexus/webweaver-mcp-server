@@ -58,7 +58,7 @@ function submitResult(outcome: SubmitOutcome, text: string): CallToolResult {
 export function createServer(): McpServer {
   const server = new McpServer({
     name: "WebWeaver Nexus",
-    version: "2.2.0",
+    version: "2.3.0",
   });
 
   // ── MCP App tool: get_contact_form ───────────────────────────────────
@@ -394,7 +394,9 @@ export function createServer(): McpServer {
               "",
               "WebWeaver Nexus is an AI-ready web development service based in East London. You work directly with a technical partner rather than an agency account team.",
               "",
-              "When someone asks ChatGPT, Perplexity, or Google's AI Overview for the best in your field, AI gives them one answer — not ten blue links. We make sure that answer is you. Put simply: landing pages and websites that AI can find, read, and recommend.",
+              "When someone asks ChatGPT, Perplexity, or Google's AI Overview for the best in your field, AI gives them one answer — not ten blue links. We make sure that answer is you. Put simply: landing pages and websites that tell your story — and that AI can find, read, and recommend.",
+              "",
+              "Story for people, structure for AI. Anyone can generate a website with AI now. What AI can't generate is your story: why you do the work, what makes you the right choice, and the proof behind it. That's where we start. Every build pairs copy and design shaped around your business with the structured data that lets AI search understand it and recommend you.",
               "",
               "Who we work with:",
               "- Creative Professionals. Your work is strong, but your site is not what AI reaches for. We build one it cites and recommends when someone asks for the best in your field.",
@@ -402,8 +404,8 @@ export function createServer(): McpServer {
               "- Skilled Trade Professionals. Local customers increasingly ask an AI assistant for a recommendation instead of searching. We make sure your business is the name it gives back.",
               "",
               "Services:",
-              "- Tier 1 — Modern Web Foundations. Two options, each starting at a single page and growing into a website as you need more pages: 1A Essentials, optimised for Local/Standard SEO, and 1B AI-Search Optimised, which adds AEO and GEO on top.",
-              "- Tier 2 — Embedded AI Integrations (Internal AI Intelligence to Automate your Web Services)",
+              "- Tier 1 — Modern Web Foundations. Two options, each starting at a single page and growing into a website as you need more pages: 1A Essentials, optimised for Local/Standard SEO, and 1B AI-Search Optimised, which adds AEO and GEO on top. Every Tier 1 build includes story-led copy, written or refined from a short questionnaire. An optional CRM Connect add-on sends every enquiry into your own HubSpot CRM.",
+              "- Tier 2 — Embedded AI Integrations (Internal AI Intelligence to Automate your Web Services). Option A, the Customer Support Assistant, can add CRM Connect so chat enquiries reach HubSpot too. Option B, the Lead-Filtering Agent, delivers scored leads into your own HubSpot CRM as standard.",
               "- Tier 3 — External AI App Connections (Tools, Apps, and Widgets to securely connect external AI Users to your Web Services)",
               "",
               "This MCP server is our own Tier 3 implementation. The tools being called here right now are a working example of what we build for clients — showing it, rather than just describing it.",
