@@ -31,8 +31,11 @@ const ALLOWED_HOSTS: readonly (string | RegExp)[] = [
   "127.0.0.1",
   "[::1]",
   "webweaver-nexus-mcp.vercel.app",
-  // Vercel preview deployments, e.g. webweaver-nexus-mcp-git-<branch>-<scope>
-  /^webweaver-nexus-mcp-[a-z0-9-]+\.vercel\.app$/,
+  // Vercel preview deployments. Vercel shortens long names, so the project
+  // part is unreliable (`webweaver-nexus-layt12kuq-…` dropped the `-mcp`); the
+  // team scope suffix is not. Matches both `<project>-<hash>-<scope>` and
+  // `<project>-git-<branch>-<scope>`.
+  /^webweaver-nexus-[a-z0-9-]+-webweaver-nexus-projects\.vercel\.app$/,
   // `npx cloudflared tunnel --url http://localhost:3001` — dev only; this
   // hostname never reaches the Vercel deployment, its edge rejects it first.
   /^[a-z0-9-]+\.trycloudflare\.com$/,
