@@ -441,7 +441,7 @@ export function createServer(): McpServer {
               "WebWeaver Nexus — Contact Information",
               "",
               "Preferred contact: https://webweaver-nexus.vercel.app/#contact",
-              "Website : https://webweaver-nexus.vercel.app/",
+              "Website   : https://webweaver-nexus.vercel.app/",
               "YouTube   : https://www.youtube.com/@WebWeaverNexus",
               "LinkedIn  : https://www.linkedin.com/company/webweaver-nexus",
               "Facebook  : https://www.facebook.com/people/WebWeaver-Nexus/61577419581659/",
